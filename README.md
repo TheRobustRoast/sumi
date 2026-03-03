@@ -45,23 +45,32 @@ A TUI-first Hyprland rice for Arch Linux, optimized for the Framework 13 AMD (Ry
 
 ## Installation
 
+### One-command bootstrap (from Arch ISO)
+
+Boot the Arch live ISO on your Framework 13, connect to WiFi, then:
+
 ```bash
-# After a fresh archinstall with Hyprland
+pacman -Sy git
+git clone https://github.com/youruser/sumi /tmp/sumi
+cd /tmp/sumi
+./bootstrap.sh
+```
+
+The bootstrap script walks you through everything interactively: connects to WiFi (launches iwctl if needed), detects your NVMe, collects your username, password, LUKS encryption passphrase, hostname, and timezone, patches the archinstall configs with your settings, runs archinstall, and stages the sumi post-install to run automatically on first login.
+
+After bootstrap finishes, it reboots into the new system. On first TTY login, `install.sh` runs automatically — installs yay, grabs AUR packages, deploys all config files, sets up greetd + Plymouth + systemd services, configures Framework 13 hardware, and changes your shell to zsh. Reboot once more for the full experience: Plymouth TUI LUKS unlock, greetd login, and the themed Hyprland desktop.
+
+### Manual install (existing Arch system)
+
+If you already have Arch + Hyprland installed:
+
+```bash
 git clone https://github.com/youruser/sumi ~/sumi
 cd ~/sumi
-chmod +x install.sh
 ./install.sh
 ```
 
-The installer will:
-
-1. Install yay (AUR helper) if missing
-2. Install all required packages via pacman and yay
-3. Back up any existing configs before overwriting
-4. Deploy all 80 config files to their correct locations
-5. Set up greetd, Plymouth, and systemd user services
-6. Configure Framework 13 hardware (fingerprint, charge limit, AMD tuning)
-7. Change your default shell to zsh
+The installer will: install yay if missing, install all packages via pacman and yay, back up existing configs before overwriting, deploy all config files, set up greetd + Plymouth + systemd user services, configure Framework 13 hardware (fingerprint, charge limit, AMD tuning), and change your default shell to zsh.
 
 Reboot when prompted. Drop wallpapers in `~/Pictures/Wallpapers/` — if the directory is empty on first boot, three starter gradient wallpapers are auto-generated.
 

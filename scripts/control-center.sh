@@ -57,38 +57,44 @@ CHOICE=$(printf '%s\n' "${ENTRIES[@]}" | fzf \
 [[ -z "$CHOICE" ]] && exit 0
 
 CMD=$(echo "$CHOICE" | awk -F '│' '{print $1}' | xargs)
+LABEL=$(echo "$CHOICE" | awk -F '│' '{print $2}' | xargs)
+
+# Wrapper: launch command with error feedback
+run() {
+    "$@" || notify-send -a sumi -u critical -t 3000 "Launch failed" "$LABEL"
+}
 
 case "$CMD" in
-    net)    impala ;;
-    bt)     bluetuith ;;
-    vol)    pulsemixer ;;
-    mon)    btop ;;
-    files)  yazi ;;
-    disk)   ncdu ~ ;;
-    git)    lazygit ;;
-    viz)    cava ;;
-    clip)   ~/.config/hypr/scripts/clipboard.sh pick ;;
-    ss)     ~/.config/hypr/scripts/screenshot.sh pick ;;
-    rec)    ~/.config/hypr/scripts/screen-record.sh pick ;;
-    emoji)  ~/.config/hypr/scripts/emoji-picker.sh ;;
-    notif)  ~/.config/hypr/scripts/notification-center.sh ;;
-    wins)   ~/.config/hypr/scripts/window-switcher.sh ;;
-    bw)     sudo bandwhich ;;
-    proc)   procs ;;
-    wall)   ~/.config/hypr/scripts/wallpaper-select.sh ;;
-    pwr)    ~/.config/hypr/scripts/power-profile.sh toggle ;;
-    theme)  ~/.config/hypr/scripts/theme-toggle.sh ;;
-    sess)   ~/.config/hypr/scripts/session-save.sh ;;
-    keys)   ~/.config/hypr/scripts/keybinds-cheatsheet.sh ;;
-    game)   ~/.config/hypr/scripts/gaming-mode.sh ;;
-    focus)  ~/.config/hypr/scripts/focus-mode.sh ;;
-    disp)   ~/.config/hypr/scripts/monitor-hotplug.sh ;;
-    clean)  ~/.config/hypr/scripts/cleanup.sh ;;
-    proj)   ~/.config/hypr/scripts/project-launcher.sh ;;
-    wt)     ~/.config/hypr/scripts/git-worktree.sh ;;
-    tmux)   tmux new-session -A -s main ;;
-    note)   ~/.config/hypr/scripts/scratch-note.sh ;;
-    dots)   ~/.config/hypr/scripts/dotfile-sync.sh ;;
-    lock)   hyprlock ;;
-    power)  ~/.config/hypr/scripts/power-menu.sh ;;
+    net)    run impala ;;
+    bt)     run bluetuith ;;
+    vol)    run pulsemixer ;;
+    mon)    run btop ;;
+    files)  run yazi ;;
+    disk)   run ncdu ~ ;;
+    git)    run lazygit ;;
+    viz)    run cava ;;
+    clip)   run ~/.config/hypr/scripts/clipboard.sh pick ;;
+    ss)     run ~/.config/hypr/scripts/screenshot.sh pick ;;
+    rec)    run ~/.config/hypr/scripts/screen-record.sh pick ;;
+    emoji)  run ~/.config/hypr/scripts/emoji-picker.sh ;;
+    notif)  run ~/.config/hypr/scripts/notification-center.sh ;;
+    wins)   run ~/.config/hypr/scripts/window-switcher.sh ;;
+    bw)     run sudo bandwhich ;;
+    proc)   run procs ;;
+    wall)   run ~/.config/hypr/scripts/wallpaper-select.sh ;;
+    pwr)    run ~/.config/hypr/scripts/power-profile.sh toggle ;;
+    theme)  run ~/.config/hypr/scripts/theme-toggle.sh ;;
+    sess)   run ~/.config/hypr/scripts/session-save.sh ;;
+    keys)   run ~/.config/hypr/scripts/keybinds-cheatsheet.sh ;;
+    game)   run ~/.config/hypr/scripts/gaming-mode.sh ;;
+    focus)  run ~/.config/hypr/scripts/focus-mode.sh ;;
+    disp)   run ~/.config/hypr/scripts/monitor-hotplug.sh ;;
+    clean)  run ~/.config/hypr/scripts/cleanup.sh ;;
+    proj)   run ~/.config/hypr/scripts/project-launcher.sh ;;
+    wt)     run ~/.config/hypr/scripts/git-worktree.sh ;;
+    tmux)   run tmux new-session -A -s main ;;
+    note)   run ~/.config/hypr/scripts/scratch-note.sh ;;
+    dots)   run ~/.config/hypr/scripts/dotfile-sync.sh ;;
+    lock)   run hyprlock ;;
+    power)  run ~/.config/hypr/scripts/power-menu.sh ;;
 esac

@@ -66,23 +66,36 @@ $CONVERT -size 2880x1920 \
     -blur 0x20 \
     "$WALL_DIR/sumi-monochrome.png" 2>/dev/null
 
-# Apply the first one
+# Validate and apply the first wallpaper
 if [[ -f "$WALL_DIR/sumi-dark-blue.png" ]]; then
     "$SCRIPTS/wallpaper-apply.sh" "$WALL_DIR/sumi-dark-blue.png" 2>/dev/null
+    touch "$FIRST_RUN_FLAG"
+elif [[ -f "$WALL_DIR/sumi-monochrome.png" ]]; then
+    # Fallback if dark-blue failed
+    "$SCRIPTS/wallpaper-apply.sh" "$WALL_DIR/sumi-monochrome.png" 2>/dev/null
+    touch "$FIRST_RUN_FLAG"
+else
+    notify-send -a sumi -u critical -t 0 "[ sumi ]" \
+        "Wallpaper generation failed.\nDrop images in ~/Pictures/Wallpapers/ and run:\n  wallpaper-apply.sh <path>"
+    touch "$FIRST_RUN_FLAG"
 fi
 
-touch "$FIRST_RUN_FLAG"
+# ── Welcome tour (split into two readable notifications) ──────
+sleep 1
 
-# ── Welcome tour (brief key hints) ───────────────────────────
-sleep 2
-notify-send -a sumi -t 8000 "[ sumi :: welcome ]" \
-    "Your rice is ready. Here are the essentials:
+notify-send -a sumi -t 10000 "[ sumi :: welcome ]" \
+    "Your rice is ready. Essentials:
 
-SUPER+D        app launcher
-SUPER+Return   terminal
-SUPER+X        control center (all TUIs)
-SUPER+/        keybind cheatsheet
-SUPER+SHIFT+W  pick wallpaper
-SUPER+E        file manager (yazi)
+SUPER+D       → app launcher
+SUPER+Return  → terminal
+SUPER+X       → control center
+SUPER+/       → keybind cheatsheet"
 
-Drop wallpapers in ~/Pictures/Wallpapers/"
+sleep 3
+
+notify-send -a sumi -t 10000 "[ sumi :: tips ]" \
+    "SUPER+SHIFT+W → pick wallpaper
+SUPER+E       → file manager (yazi)
+
+Drop wallpapers in ~/Pictures/Wallpapers/
+Colors auto-adapt to your wallpaper."

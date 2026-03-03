@@ -35,12 +35,12 @@ enable_focus() {
     mkdir -p "$(dirname "$STATE_FILE")"
     echo "on" > "$STATE_FILE"
 
-    # Brief notification BEFORE DND kicks in
-    notify-send -a "sumi" -u low -t 2000 "[ FOCUS MODE ON ]" \
+    # Show notification BEFORE pausing — keep delay short so it feels snappy
+    notify-send -a "sumi" -u low -t 1500 "[ FOCUS MODE ON ]" \
         "notifications paused · waybar hidden"
 
-    # Small delay so the notification actually shows
-    sleep 2.5
+    # Wait just long enough for dunst to render the notification
+    sleep 1
 
     # Pause notifications (DND)
     dunstctl set-paused true 2>/dev/null

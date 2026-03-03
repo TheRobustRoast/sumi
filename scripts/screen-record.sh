@@ -41,7 +41,16 @@ stop_recording() {
             kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null
         fi
         rm -f "$PIDFILE"
-        notify-send -a "sumi" -t 3000 "Recording stopped" "Saved to $RECORD_DIR"
+        # Find the most recent recording and show its size
+        local latest
+        latest=$(find "$RECORD_DIR" -name 'rec_*' -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+        if [[ -n "$latest" ]] && [[ -f "$latest" ]]; then
+            local size
+            size=$(du -h "$latest" 2>/dev/null | cut -f1)
+            notify-send -a "sumi" -t 4000 "Recording saved" "$(basename "$latest") ($size)"
+        else
+            notify-send -a "sumi" -t 3000 "Recording stopped" "Saved to $RECORD_DIR"
+        fi
     fi
 }
 

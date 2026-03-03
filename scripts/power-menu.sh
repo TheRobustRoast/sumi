@@ -18,14 +18,22 @@ ACTION=$(printf "lock\t Lock screen\nsuspend\t Suspend (sleep)\nreboot\t Reboot\
 
 confirm() {
     local ans
-    ans=$(printf "yes\nno" | fzf --prompt="$1 " --height=5 --reverse --no-info $FZF_THEME)
-    [[ "$ans" == "yes" ]]
+    ans=$(printf "yes — $1\nno — cancel" | fzf --prompt="confirm > " --height=5 --reverse --no-info $FZF_THEME)
+    [[ "$ans" == yes* ]]
+}
+
+# Countdown with cancel option for destructive actions
+countdown() {
+    local action="$1" secs="${2:-3}"
+    local nid
+    nid=$(notify-send -a sumi -t $((secs * 1000)) -p "$action in ${secs}s..." "Press SUPER+ESC to cancel")
+    sleep "$secs"
 }
 
 case "$ACTION" in
     lock)     hyprlock ;;
     suspend)  systemctl suspend ;;
-    reboot)   confirm "Reboot now?" && systemctl reboot ;;
-    shutdown) confirm "Shutdown now?" && systemctl poweroff ;;
-    logout)   confirm "Exit Hyprland?" && hyprctl dispatch exit ;;
+    reboot)   confirm "Reboot" && countdown "Reboot" 3 && systemctl reboot ;;
+    shutdown) confirm "Shutdown" && countdown "Shutdown" 3 && systemctl poweroff ;;
+    logout)   confirm "Exit Hyprland" && hyprctl dispatch exit ;;
 esac
