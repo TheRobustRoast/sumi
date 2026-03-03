@@ -43,8 +43,16 @@ prompt()  { echo -ne "${CYN}:: ${RST}$1"; }
 
 # ── 0. Sanity checks ───────────────────────────────────────
 if [[ ! -f "$CONF" ]]; then
-    err "Cannot find archinstall/user_configuration.json"
+    err "Cannot find: $CONF"
     err "Make sure you're running this from the sumi repo root."
+    err "Expected: cd /path/to/sumi && ./bootstrap.sh"
+    exit 1
+fi
+
+if [[ ! -f "$CREDS" ]]; then
+    err "Cannot find: $CREDS"
+    err "Make sure you're running this from the sumi repo root."
+    err "Expected: cd /path/to/sumi && ./bootstrap.sh"
     exit 1
 fi
 
