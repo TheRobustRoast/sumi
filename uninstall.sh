@@ -132,6 +132,27 @@ if [[ -f "$HOME/.zshrc" ]]; then
     fi
 fi
 
+# ── Remove .tmux.conf (careful) ───────────────────────────
+if [[ -f "$HOME/.tmux.conf" ]]; then
+    if grep -q "sumi" "$HOME/.tmux.conf" 2>/dev/null; then
+        rm -f "$HOME/.tmux.conf"
+        removed ".tmux.conf (sumi config)"
+    else
+        warn "Skipping .tmux.conf — appears to be user's own config"
+    fi
+fi
+
+# ── Remove .editorconfig ────────────────────────────────────
+if [[ -f "$HOME/.editorconfig" ]]; then
+    rm -f "$HOME/.editorconfig"
+    removed ".editorconfig"
+fi
+
+# ── Remove battery charge limit tmpfile ─────────────────────
+if [[ -f /etc/tmpfiles.d/battery-charge-limit.conf ]]; then
+    sudo rm -f /etc/tmpfiles.d/battery-charge-limit.conf 2>/dev/null && removed "battery-charge-limit.conf"
+fi
+
 # ── Clean cache ─────────────────────────────────────────────
 info "Cleaning sumi cache..."
 rm -rf "$HOME/.cache/sumi" 2>/dev/null && removed ".cache/sumi"

@@ -8,8 +8,9 @@
 .DS_Store
 Thumbs.db
 
-# Secrets — never commit real credentials
-archinstall/user_credentials.json
+# Note: archinstall/user_credentials.json is a TEMPLATE with placeholder
+# values (!CHANGE_ME!) — safe to commit. bootstrap.sh patches real
+# credentials into a temp file at runtime which gets auto-cleaned.
 
 # Generated at runtime by wallust (per-wallpaper)
 # Don't commit these — they get regenerated on wallpaper change

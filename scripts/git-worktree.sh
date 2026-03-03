@@ -12,7 +12,12 @@ if ! git rev-parse --is-inside-work-tree &>/dev/null; then
     exit 1
 fi
 
-REPO_ROOT=$(git rev-parse --show-toplevel)
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+if [[ -z "$REPO_ROOT" ]]; then
+    echo "Could not determine repo root."
+    read -r -p "Press enter..."
+    exit 1
+fi
 
 ACTIONS=(
     "list    │ switch to existing worktree"

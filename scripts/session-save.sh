@@ -21,16 +21,17 @@ restore_session() {
     [[ ! -f "$file" ]] && echo "File not found: $file" && return 1
 
     local restored=0
-    jq -r '.[] | "\(.class) \(.workspace.id) \(.at[0]) \(.at[1]) \(.size[0]) \(.size[1]) \(.floating)"' "$file" \
-    | while IFS=' ' read -r class ws x y w h floating; do
+    local total=0
+    # Use process substitution instead of pipe to avoid subshell counter loss
+    while IFS=' ' read -r class ws x y w h floating; do
         [[ -z "$class" || "$class" == "null" ]] && continue
+        ((total++))
 
         # Try to find running instance and move it
         addr=$(hyprctl clients -j | jq -r ".[] | select(.class == \"$class\") | .address" | head -1)
         if [[ -n "$addr" && "$addr" != "null" ]]; then
             hyprctl dispatch movetoworkspacesilent "$ws,address:$addr" 2>/dev/null
             if [[ "$floating" == "true" ]]; then
-                # Focus the window first so move/resize commands target it
                 hyprctl dispatch focuswindow "address:$addr" 2>/dev/null
                 hyprctl dispatch setfloating "address:$addr" 2>/dev/null
                 hyprctl dispatch moveactive "exact $x $y" 2>/dev/null
@@ -38,8 +39,8 @@ restore_session() {
             fi
             ((restored++))
         fi
-    done
-    notify-send -a "sumi" "Session restored" "$(basename "$file" .json)"
+    done < <(jq -r '.[] | "\(.class) \(.workspace.id) \(.at[0]) \(.at[1]) \(.size[0]) \(.size[1]) \(.floating)"' "$file")
+    notify-send -a "sumi" "Session restored" "$(basename "$file" .json) — $restored/$total windows"
 }
 
 list_sessions() {

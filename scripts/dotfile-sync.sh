@@ -63,7 +63,7 @@ snapshot() {
     done
 
     if [[ $changed -eq 1 ]]; then
-        cd "$DOTFILE_REPO"
+        cd "$DOTFILE_REPO" || { echo "Cannot cd to $DOTFILE_REPO"; return 1; }
         git add -A
         local status=$(git status --porcelain)
         if [[ -n "$status" ]]; then

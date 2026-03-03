@@ -15,7 +15,7 @@ ENERGY_DESIGN=$(cat /sys/class/power_supply/BAT1/energy_full_design 2>/dev/null 
 WATTS=$(echo "scale=1; $POWER_NOW / 1000000" | bc 2>/dev/null || echo "?")
 
 # Battery health percentage
-if [[ "$ENERGY_DESIGN" -gt 0 ]]; then
+if [[ "$ENERGY_DESIGN" =~ ^[0-9]+$ ]] && [[ "$ENERGY_DESIGN" -gt 0 ]]; then
     HEALTH=$(echo "scale=0; $ENERGY_FULL * 100 / $ENERGY_DESIGN" | bc 2>/dev/null || echo "?")
 else
     HEALTH="?"
@@ -38,11 +38,16 @@ case "$1" in
         esac
         TOOLTIP="Status: ${STATUS}\nPower: ${WATTS}W\nHealth: ${HEALTH}%\nCharge limit: ${LIMIT}%"
         CLASS=""
-        if [[ "$CAPACITY" -le 15 ]]; then CLASS="critical"
-        elif [[ "$CAPACITY" -le 30 ]]; then CLASS="warning"
-        elif [[ "$STATUS" == "Charging" ]]; then CLASS="charging"
+        if [[ "$CAPACITY" =~ ^[0-9]+$ ]]; then
+            if [[ "$CAPACITY" -le 15 ]]; then CLASS="critical"
+            elif [[ "$CAPACITY" -le 30 ]]; then CLASS="warning"
+            elif [[ "$STATUS" == "Charging" ]]; then CLASS="charging"
+            fi
         fi
-        echo "{\"text\": \"bat:${CAPACITY}%${suffix} ${WATTS}W\", \"tooltip\": \"${TOOLTIP}\", \"class\": \"${CLASS}\", \"percentage\": ${CAPACITY}}"
+        # percentage must be numeric for waybar, fallback to 0
+        local pct="${CAPACITY}"
+        [[ ! "$pct" =~ ^[0-9]+$ ]] && pct=0
+        echo "{\"text\": \"bat:${CAPACITY}%${suffix} ${WATTS}W\", \"tooltip\": \"${TOOLTIP}\", \"class\": \"${CLASS}\", \"percentage\": ${pct}}"
         ;;
     set-limit)
         # Usage: framework-battery.sh set-limit 80

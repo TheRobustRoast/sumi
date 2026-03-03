@@ -50,10 +50,21 @@ if [[ ! -f "$CONF" ]]; then
 fi
 
 if [[ ! -f "$CREDS" ]]; then
-    err "Cannot find: $CREDS"
-    err "Make sure you're running this from the sumi repo root."
-    err "Expected: cd /path/to/sumi && ./bootstrap.sh"
-    exit 1
+    warn "user_credentials.json not found — generating template..."
+    mkdir -p "$(dirname "$CREDS")"
+    cat > "$CREDS" << 'CREDSTPL'
+{
+    "!root-password": "!CHANGE_ME!",
+    "!users": [
+        {
+            "!password": "!CHANGE_ME!",
+            "sudo": true,
+            "username": "user"
+        }
+    ]
+}
+CREDSTPL
+    ok "Generated $CREDS"
 fi
 
 if [[ ! -d /run/archiso ]]; then

@@ -85,9 +85,9 @@ echo ""
 info "Checking for yay..."
 if ! command -v yay &>/dev/null; then
     info "Installing yay..."
-    cd /tmp
-    git clone https://aur.archlinux.org/yay-bin.git
-    cd yay-bin
+    rm -rf /tmp/yay-bin
+    git clone https://aur.archlinux.org/yay-bin.git /tmp/yay-bin
+    cd /tmp/yay-bin
     makepkg -si --noconfirm
     cd "$SCRIPT_DIR"
     ok "yay installed"
@@ -103,7 +103,7 @@ yay -S --needed --noconfirm \
     framework-laptop-kmod-dkms-git \
     wtype \
     bibata-cursor-theme \
-    2>/dev/null || warn "Some AUR packages may have failed — check manually"
+    || warn "Some AUR packages may have failed — check output above"
 
 # ── 2a. Ensure required pacman packages ────────────────────
 info "Verifying required packages..."
@@ -125,7 +125,7 @@ sudo pacman -S --needed --noconfirm \
     rsync \
     fuzzel \
     doggo \
-    2>/dev/null || warn "Some packages may have failed — check manually"
+    || warn "Some packages may have failed — check output above"
 
 # ── 3. Deploy configs ───────────────────────────────────────
 echo ""
@@ -319,10 +319,13 @@ if [[ "$fp_answer" =~ ^[Yy]$ ]]; then
     fprintd-enroll || warn "Fingerprint enrollment failed — try again after reboot"
 fi
 
-# Set charge limit to 80% for battery longevity
+# Set charge limit to 80% for battery longevity (persistent via tmpfiles)
 if [[ -f /sys/class/power_supply/BAT1/charge_control_end_threshold ]]; then
     echo 80 | sudo tee /sys/class/power_supply/BAT1/charge_control_end_threshold > /dev/null
-    ok "Battery charge limit set to 80% (recommended for longevity)"
+    # Make it persistent across reboots via systemd-tmpfiles
+    echo 'w /sys/class/power_supply/BAT1/charge_control_end_threshold - - - - 80' \
+        | sudo tee /etc/tmpfiles.d/battery-charge-limit.conf > /dev/null
+    ok "Battery charge limit set to 80% (persistent via tmpfiles)"
 fi
 
 # AMD-specific kernel parameters for better s2idle
@@ -341,8 +344,8 @@ info "Setting up Zsh shell environment..."
 
 # Change default shell to zsh
 if command -v zsh &>/dev/null; then
-    if [[ "$SHELL" != "$(which zsh)" ]]; then
-        chsh -s "$(which zsh)"
+    if [[ "$SHELL" != "$(command -v zsh)" ]]; then
+        chsh -s "$(command -v zsh)"
         ok "Default shell changed to zsh"
     else
         ok "Shell already set to zsh"
@@ -352,6 +355,11 @@ fi
 # Deploy .zshrc
 deploy "$SCRIPT_DIR/zsh/.zshrc" "$HOME/.zshrc"
 ok "Zsh config deployed with TUI aliases"
+
+# Deploy .editorconfig (project-level defaults for editors)
+if [[ -f "$SCRIPT_DIR/.editorconfig" ]]; then
+    deploy "$SCRIPT_DIR/.editorconfig" "$HOME/.editorconfig"
+fi
 
 # ── 9. Disable other display managers ────────────────────────
 info "Checking for conflicting display managers..."
