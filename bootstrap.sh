@@ -61,7 +61,8 @@ if [[ ! -f "$CREDS" ]]; then
             "sudo": true,
             "username": "user"
         }
-    ]
+    ],
+    "encryption_password": "!CHANGE_ME!"
 }
 CREDSTPL
     ok "Generated $CREDS"
@@ -244,12 +245,10 @@ trap cleanup_secrets EXIT
 
 jq \
     --arg disk "$NVME" \
-    --arg luks "$LUKS_PASS" \
     --arg host "$HOSTNAME" \
     --arg tz "$TIMEZONE" \
     '
     .disk_config.device_modifications[0].device = $disk |
-    .disk_encryption.encryption_password = $luks |
     .hostname = $host |
     .timezone = $tz
     ' "$CONF" > "$PATCHED_CONF"
@@ -265,10 +264,12 @@ jq \
     --arg user "$USERNAME" \
     --arg pass "$PASSWORD" \
     --arg root "$ROOT_PASSWORD" \
+    --arg luks "$LUKS_PASS" \
     '
     ."!root-password" = $root |
     ."!users"[0].username = $user |
-    ."!users"[0]."!password" = $pass
+    ."!users"[0]."!password" = $pass |
+    .encryption_password = $luks
     ' "$CREDS" > "$PATCHED_CREDS"
 
 ok "Patched user_credentials.json"
