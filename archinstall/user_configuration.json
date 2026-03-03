@@ -17,18 +17,19 @@
                 "partitions": [
                     {
                         "btrfs": [],
+                        "dev_path": null,
                         "flags": ["boot"],
                         "fs_type": "fat32",
                         "mount_options": [],
                         "mountpoint": "/boot",
                         "obj_id": "efi",
                         "size": {
-                            "sector_size": null,
+                            "sector_size": {"value": 512, "unit": "B"},
                             "unit": "GiB",
                             "value": 1
                         },
                         "start": {
-                            "sector_size": null,
+                            "sector_size": {"value": 512, "unit": "B"},
                             "unit": "MiB",
                             "value": 1
                         },
@@ -42,18 +43,19 @@
                             {"mountpoint": "@snapshots", "name": "@snapshots"},
                             {"mountpoint": "@var_log", "name": "@var_log"}
                         ],
+                        "dev_path": null,
                         "flags": [],
                         "fs_type": "btrfs",
                         "mount_options": ["compress=zstd", "noatime"],
                         "mountpoint": "/",
                         "obj_id": "root",
                         "size": {
-                            "sector_size": null,
+                            "sector_size": {"value": 512, "unit": "B"},
                             "unit": "Percent",
                             "value": 100
                         },
                         "start": {
-                            "sector_size": null,
+                            "sector_size": {"value": 512, "unit": "B"},
                             "unit": "GiB",
                             "value": 1
                         },
