@@ -1,0 +1,20 @@
+# Cache files
+*.swp
+*.swo
+*~
+.cache/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Secrets — never commit real credentials
+archinstall/user_credentials.json
+
+# Generated theme files (wallust output)
+# These get regenerated on wallpaper change
+*.pyc
+__pycache__/
+
+# Session saves are per-machine
+sessions/

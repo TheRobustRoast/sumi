@@ -1,0 +1,6 @@
+[Unit]
+Description=Sumi cleanup (clipboard trim, old files)
+
+[Service]
+Type=oneshot
+ExecStart=%h/.config/hypr/scripts/cleanup.sh

@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Hypr TUI
+Description=Boxy monochrome TUI-style boot splash for Hyprland
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/hypr-tui
+ScriptFile=/usr/share/plymouth/themes/hypr-tui/hypr-tui.script

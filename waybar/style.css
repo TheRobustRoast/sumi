@@ -1,0 +1,235 @@
+/* ╔══════════════════════════════════════════════════════════════╗
+ * ║  Waybar Style — Boxy TUI Monochrome + Accent                ║
+ * ╚══════════════════════════════════════════════════════════════╝ */
+
+@import "colors.css";
+
+* {
+    font-family: "JetBrainsMono Nerd Font", monospace;
+    font-size: 12px;
+    font-weight: 500;
+    border: none;
+    border-radius: 0;
+    min-height: 0;
+}
+
+window#waybar {
+    background: alpha(@bg, 0.85);
+    color: @fg;
+    border: 1px solid @surface2;
+}
+
+/* ── Reset all modules ─────────────────────────────────────── */
+#workspaces,
+#window,
+#clock,
+#pulseaudio,
+#network,
+#battery,
+#backlight,
+#tray,
+#custom-logo,
+#custom-separator,
+#custom-wallpaper,
+#custom-power-profile,
+#custom-framework-battery,
+#custom-recording,
+#custom-gaming-mode,
+#custom-focus-mode,
+#submap {
+    padding: 0 6px;
+    margin: 0;
+    background: transparent;
+    color: @muted;
+}
+
+/* ── Logo ──────────────────────────────────────────────────── */
+#custom-logo {
+    color: @accent;
+    font-weight: bold;
+    border-right: 1px solid @surface2;
+}
+
+/* ── Workspaces ────────────────────────────────────────────── */
+#workspaces button {
+    padding: 0 4px;
+    margin: 0;
+    color: @muted;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    font-family: "JetBrainsMono Nerd Font", monospace;
+    font-size: 12px;
+}
+
+#workspaces button:hover {
+    background: @surface1;
+    color: @text;
+}
+
+#workspaces button.active {
+    color: @bg;
+    background: @accent;
+    font-weight: bold;
+}
+
+#workspaces button.urgent {
+    background: @urgent;
+    color: @bg;
+}
+
+/* ── Window title ──────────────────────────────────────────── */
+#window {
+    color: @subtle;
+    font-style: italic;
+}
+
+/* ── Media ─────────────────────────────────────────────────── */
+#custom-media {
+    color: @muted;
+    font-style: italic;
+    padding: 0 8px;
+}
+#custom-media.Playing {
+    color: @accent_dim;
+}
+#custom-media.Paused {
+    color: @muted;
+}
+
+/* ── Clock ─────────────────────────────────────────────────── */
+#clock {
+    color: @text;
+    font-weight: bold;
+}
+
+/* ── Separator ─────────────────────────────────────────────── */
+#custom-separator {
+    color: @surface2;
+    padding: 0 2px;
+}
+
+/* ── Right modules ─────────────────────────────────────────── */
+#pulseaudio {
+    color: @subtle;
+}
+#pulseaudio.muted {
+    color: @muted;
+}
+
+#network {
+    color: @subtle;
+}
+#network.disconnected {
+    color: @urgent;
+}
+
+#battery {
+    color: @subtle;
+}
+#battery.warning {
+    color: @warn;
+}
+#battery.critical {
+    color: @urgent;
+    animation: blink 1s steps(2) infinite;
+}
+#battery.charging {
+    color: @ok;
+}
+
+/* ── Power profile ─────────────────────────────────────────── */
+#custom-power-profile {
+    color: @subtle;
+}
+#custom-power-profile.power-saver {
+    color: @ok;
+}
+#custom-power-profile.performance {
+    color: @warn;
+}
+
+/* ── Framework battery ─────────────────────────────────────── */
+#custom-framework-battery {
+    color: @subtle;
+}
+#custom-framework-battery.warning {
+    color: @warn;
+}
+#custom-framework-battery.critical {
+    color: @urgent;
+    animation: blink 1s steps(2) infinite;
+}
+#custom-framework-battery.charging {
+    color: @ok;
+}
+
+/* ── Backlight ─────────────────────────────────────────────── */
+#backlight {
+    color: @subtle;
+}
+
+/* ── Wallpaper button ──────────────────────────────────────── */
+#custom-wallpaper {
+    color: @accent_dim;
+    border-left: 1px solid @surface2;
+}
+#custom-wallpaper:hover {
+    color: @accent;
+    background: @surface1;
+}
+
+/* ── Tray ──────────────────────────────────────────────────── */
+#tray > .passive {
+    -gtk-icon-effect: dim;
+}
+
+/* ── Submap indicator ──────────────────────────────────────── */
+#submap {
+    color: @bg;
+    background: @warn;
+    font-weight: bold;
+    padding: 0 8px;
+}
+
+/* ── Recording indicator ──────────────────────────────────── */
+#custom-recording {
+    color: @urgent;
+    font-weight: bold;
+    padding: 0 6px;
+}
+#custom-recording.recording {
+    animation: blink-rec 1s ease-in-out infinite;
+}
+
+/* ── Gaming mode indicator ─────────────────────────────────── */
+#custom-gaming-mode.active {
+    color: @bg;
+    background: @warn;
+    font-weight: bold;
+    padding: 0 6px;
+}
+
+/* ── Focus/DND indicator ──────────────────────────────────── */
+#custom-focus-mode.active {
+    color: @bg;
+    background: @accent;
+    font-weight: bold;
+    padding: 0 6px;
+}
+
+/* ── Animations ────────────────────────────────────────────── */
+@keyframes blink {
+    to { color: @bg; }
+}
+@keyframes blink-rec {
+    50% { color: alpha(@urgent, 0.3); }
+}
+
+/* ── Tooltip ───────────────────────────────────────────────── */
+tooltip {
+    background: @surface0;
+    border: 1px solid @surface2;
+    border-radius: 0;
+    color: @text;
+}

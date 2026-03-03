@@ -1,0 +1,12 @@
+[Unit]
+Description=Clipboard history daemon (cliphist + wl-paste)
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/bash -c 'wl-paste --watch cliphist store'
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=hyprland-session.target

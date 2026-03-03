@@ -1,0 +1,51 @@
+# ╔══════════════════════════════════════════════════════════════╗
+# ║  Lazygit — Monochrome + Accent Theme                         ║
+# ╚══════════════════════════════════════════════════════════════╝
+
+gui:
+  showIcons: true
+  nerdFontsVersion: "3"
+  border: "single"
+  scrollHeight: 2
+  scrollPastBottom: true
+  mouseEvents: false
+  skipDiscardChangeWarning: false
+  sidePanelWidth: 0.3333
+  expandFocusedSidePanel: true
+  mainPanelSplitMode: "flexible"
+  theme:
+    activeBorderColor:
+      - "#7aa2f7"
+      - bold
+    inactiveBorderColor:
+      - "#3a3a3a"
+    searchingActiveBorderColor:
+      - "#e0af68"
+      - bold
+    optionsTextColor:
+      - "#7aa2f7"
+    selectedLineBgColor:
+      - "#1a1a1a"
+    selectedRangeBgColor:
+      - "#2a2a2a"
+    cherryPickedCommitBgColor:
+      - "#3a3a3a"
+    cherryPickedCommitFgColor:
+      - "#7aa2f7"
+    unstagedChangesColor:
+      - "#f7768e"
+    defaultFgColor:
+      - "#c8c8c8"
+
+git:
+  paging:
+    colorArg: always
+    useConfig: false
+  commit:
+    signOff: false
+  merging:
+    manualCommit: false
+    args: ""
+
+os:
+  editPreset: "nvim"

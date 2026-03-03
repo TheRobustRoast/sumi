@@ -1,0 +1,205 @@
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  Waybar — Framework 13 AMD · Boxy TUI Aesthetic             ║
+// ╚══════════════════════════════════════════════════════════════╝
+{
+    "layer": "top",
+    "position": "top",
+    "height": 28,
+    "spacing": 0,
+    "margin-top": 4,
+    "margin-left": 8,
+    "margin-right": 8,
+
+    "modules-left": [
+        "custom/logo",
+        "hyprland/workspaces",
+        "hyprland/submap",
+        "custom/recording",
+        "hyprland/window"
+    ],
+    "modules-center": [
+        "custom/media",
+        "clock"
+    ],
+    "modules-right": [
+        "custom/gaming-mode",
+        "custom/focus-mode",
+        "tray",
+        "custom/separator",
+        "custom/power-profile",
+        "custom/separator",
+        "pulseaudio",
+        "custom/separator",
+        "backlight",
+        "custom/separator",
+        "network",
+        "custom/separator",
+        "custom/framework-battery",
+        "custom/separator",
+        "custom/wallpaper"
+    ],
+
+    "custom/logo": {
+        "format": " [hypr] ",
+        "on-click": "foot -T control-center -e ~/.config/hypr/scripts/control-center.sh",
+        "on-click-right": "foot -T keybinds -e ~/.config/hypr/scripts/keybinds-cheatsheet.sh",
+        "tooltip-format": "Left: control center | Right: keybinds"
+    },
+
+    "custom/separator": {
+        "format": "│",
+        "tooltip": false
+    },
+
+    "custom/wallpaper": {
+        "format": " [wp] ",
+        "on-click": "~/.config/hypr/scripts/wallpaper-select.sh",
+        "on-click-right": "~/.config/hypr/scripts/wallpaper-random.sh",
+        "tooltip-format": "Left: pick wallpaper | Right: random"
+    },
+
+    "hyprland/workspaces": {
+        "format": " {icon} ",
+        "format-icons": {
+            "1": "1:term",
+            "2": "2:web",
+            "3": "3:code",
+            "4": "4:docs",
+            "5": "5:chat",
+            "6": "6",
+            "7": "7",
+            "8": "8",
+            "9": "9",
+            "10": "0",
+            "default": "{id}",
+            "active": " {id}*",
+            "urgent": " {id}!"
+        },
+        "on-click": "activate",
+        "sort-by-number": true,
+        "active-only": false,
+        "all-outputs": true,
+        "persistent-workspaces": {
+            "*": [1, 2, 3, 4, 5]
+        }
+    },
+
+    "hyprland/window": {
+        "format": "│ {title}",
+        "max-length": 40,
+        "rewrite": {
+            "(.*) — Mozilla Firefox": "ff: $1",
+            "(.*) - foot": "term: $1"
+        },
+        "separate-outputs": true
+    },
+
+    "clock": {
+        "format": "[ {:%Y-%m-%d  %H:%M} ]",
+        "format-alt": "[ {:%A, %B %d} ]",
+        "tooltip-format": "<tt>{calendar}</tt>",
+        "calendar": {
+            "mode": "month",
+            "weeks-pos": "left",
+            "format": {
+                "months": "<span color='#c8c8c8'><b>{}</b></span>",
+                "weeks": "<span color='#6a6a6a'>W{}</span>",
+                "weekdays": "<span color='#7aa2f7'><b>{}</b></span>",
+                "today": "<span color='#7aa2f7'><b><u>{}</u></b></span>"
+            }
+        }
+    },
+
+    "pulseaudio": {
+        "format": "vol:{volume}%",
+        "format-muted": "vol:mute",
+        "format-bluetooth": "vol:{volume}%[bt]",
+        "on-click": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle",
+        "on-click-right": "foot -T pulsemixer -e pulsemixer",
+        "on-click-middle": "foot -T bluetuith -e bluetuith",
+        "scroll-step": 2,
+        "tooltip-format": "{desc}\n{volume}% │ {format_source}"
+    },
+
+    "network": {
+        "format-wifi": "net:{signalStrength}%",
+        "format-ethernet": "net:eth",
+        "format-disconnected": "net:off",
+        "tooltip-format-wifi": "{essid} │ {signalStrength}% │ {frequency}GHz\n{ifname}: {ipaddr}/{cidr}\n▼ {bandwidthDownBits} ▲ {bandwidthUpBits}",
+        "tooltip-format-ethernet": "{ifname}: {ipaddr}/{cidr}\n▼ {bandwidthDownBits} ▲ {bandwidthUpBits}",
+        "tooltip-format-disconnected": "Disconnected",
+        "on-click": "foot -T impala -e impala",
+        "interval": 5
+    },
+
+    "custom/power-profile": {
+        "exec": "~/.config/hypr/scripts/power-profile.sh waybar",
+        "return-type": "json",
+        "interval": 5,
+        "on-click": "~/.config/hypr/scripts/power-profile.sh toggle",
+        "tooltip": true
+    },
+
+    "custom/framework-battery": {
+        "exec": "~/.config/hypr/scripts/framework-battery.sh waybar",
+        "return-type": "json",
+        "interval": 5,
+        "on-click": "~/.config/hypr/scripts/framework-battery.sh set-limit 80",
+        "on-click-right": "~/.config/hypr/scripts/framework-battery.sh set-limit 100",
+        "tooltip": true
+    },
+
+    "backlight": {
+        "format": "lcd:{percent}%",
+        "on-scroll-up": "brightnessctl set 2%+",
+        "on-scroll-down": "brightnessctl set 2%-",
+        "tooltip-format": "Brightness: {percent}%"
+    },
+
+    "tray": {
+        "icon-size": 14,
+        "spacing": 4
+    },
+
+    "hyprland/submap": {
+        "format": " [{}] ",
+        "tooltip": false,
+        "max-length": 12
+    },
+
+    "custom/gaming-mode": {
+        "exec": "if [ -f $HOME/.cache/sumi/gaming-mode ] && [ \"$(cat $HOME/.cache/sumi/gaming-mode)\" = 'on' ]; then echo '{\"text\": \"[GAME]\", \"class\": \"active\"}'; else echo '{\"text\": \"\", \"class\": \"\"}'; fi",
+        "return-type": "json",
+        "interval": 3,
+        "on-click": "~/.config/hypr/scripts/gaming-mode.sh",
+        "tooltip": false
+    },
+
+    "custom/focus-mode": {
+        "exec": "if [ -f $HOME/.cache/sumi/focus-mode ] && [ \"$(cat $HOME/.cache/sumi/focus-mode)\" = 'on' ]; then echo '{\"text\": \"[DND]\", \"class\": \"active\"}'; else echo '{\"text\": \"\", \"class\": \"\"}'; fi",
+        "return-type": "json",
+        "interval": 3,
+        "on-click": "~/.config/hypr/scripts/focus-mode.sh",
+        "tooltip": false
+    },
+
+    "custom/media": {
+        "exec": "playerctl metadata --format '{\"text\": \"{{ artist }} — {{ title }}\", \"tooltip\": \"{{ playerName }}: {{ artist }} — {{ title }}\\n{{ album }}\\n{{ duration(position) }}/{{ duration(mpris:length) }}\", \"class\": \"{{ status }}\"}' 2>/dev/null || echo '{\"text\": \"\", \"class\": \"\"}'",
+        "return-type": "json",
+        "interval": 3,
+        "max-length": 30,
+        "on-click": "playerctl play-pause",
+        "on-click-right": "playerctl next",
+        "on-scroll-up": "playerctl position 5+",
+        "on-scroll-down": "playerctl position 5-",
+        "tooltip": true
+    },
+
+    "custom/recording": {
+        "exec": "if [ -f /tmp/sumi-recording.pid ] && kill -0 $(cat /tmp/sumi-recording.pid) 2>/dev/null; then echo '{\"text\": \"● REC\", \"class\": \"recording\"}'; else echo '{\"text\": \"\", \"class\": \"\"}'; fi",
+        "return-type": "json",
+        "interval": 2,
+        "on-click": "~/.config/hypr/scripts/screen-record.sh area",
+        "tooltip": false
+    }
+}

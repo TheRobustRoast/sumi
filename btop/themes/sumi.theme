@@ -1,0 +1,70 @@
+# btop sumi theme — monochrome + accent
+# Overwritten by wallust on wallpaper change
+
+# Main bg/fg
+theme[main_bg]="#0a0a0a"
+theme[main_fg]="#c8c8c8"
+
+# Title color
+theme[title]="#c8c8c8"
+
+# Highlight color (accent)
+theme[hi_fg]="#7aa2f7"
+
+# Selected item bg/fg
+theme[selected_bg]="#1a1a1a"
+theme[selected_fg]="#c8c8c8"
+
+# Inactive text
+theme[inactive_fg]="#3a3a3a"
+
+# Process box gradient
+theme[proc_misc]="#6a6a6a"
+
+# Box borders
+theme[cpu_box]="#2a2a2a"
+theme[mem_box]="#2a2a2a"
+theme[net_box]="#2a2a2a"
+theme[proc_box]="#2a2a2a"
+
+# Graph colors — monochrome gradient with accent tip
+theme[graph_text]="#6a6a6a"
+
+# CPU graph
+theme[cpu_start]="#3a3a3a"
+theme[cpu_mid]="#6a6a6a"
+theme[cpu_end]="#7aa2f7"
+
+# Memory graph
+theme[mem_start]="#3a3a3a"
+theme[mem_mid]="#6a6a6a"
+theme[mem_end]="#7aa2f7"
+
+# Download graph
+theme[download_start]="#3a3a3a"
+theme[download_mid]="#6a6a6a"
+theme[download_end]="#9ece6a"
+
+# Upload graph
+theme[upload_start]="#3a3a3a"
+theme[upload_mid]="#6a6a6a"
+theme[upload_end]="#f7768e"
+
+# Temperature (cool → hot)
+theme[temp_start]="#9ece6a"
+theme[temp_mid]="#e0af68"
+theme[temp_end]="#f7768e"
+
+# Free/cached/available mem
+theme[free_start]="#3a3a3a"
+theme[free_mid]="#3a3a3a"
+theme[free_end]="#3a3a3a"
+theme[cached_start]="#3a3a3a"
+theme[cached_mid]="#6a6a6a"
+theme[cached_end]="#6a6a6a"
+theme[available_start]="#3a3a3a"
+theme[available_mid]="#6a6a6a"
+theme[available_end]="#9ece6a"
+theme[used_start]="#3a3a3a"
+theme[used_mid]="#6a6a6a"
+theme[used_end]="#7aa2f7"

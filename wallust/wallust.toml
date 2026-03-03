@@ -1,0 +1,22 @@
+# ╔══════════════════════════════════════════════════════════════╗
+# ║  Wallust Config — Monochrome + Single Accent from Wallpaper ║
+# ╚══════════════════════════════════════════════════════════════╝
+
+[settings]
+backend = "resized"
+color_space = "labmixed"
+palette = "dark16"
+threshold = 20
+check_contrast = true
+
+# Monochrome base: keep bg/fg grayscale, only inject accent from wallpaper
+[templates]
+hyprland = { src = "colors-hyprland.conf", target = "~/.config/hypr/conf.d/colors.conf" }
+foot = { src = "colors-foot.ini", target = "~/.config/foot/colors.ini" }
+waybar = { src = "colors-waybar.css", target = "~/.config/waybar/colors.css" }
+fuzzel = { src = "colors-fuzzel.ini", target = "~/.config/fuzzel/colors.ini" }
+dunst = { src = "colors-dunst.conf", target = "~/.config/dunst/dunstrc.d/colors.conf" }
+hyprlock = { src = "colors-hyprlock.conf", target = "~/.config/hypr/hyprlock-colors.conf" }
+cava = { src = "colors-cava.conf", target = "~/.config/cava/colors.conf" }
+btop = { src = "colors-btop.conf", target = "~/.config/btop/themes/wallust.theme" }
+tmux = { src = "colors-tmux.conf", target = "~/.config/sumi/tmux-colors.conf" }
