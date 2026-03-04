@@ -38,10 +38,10 @@
                     },
                     {
                         "btrfs": [
-                            {"mountpoint": "@", "name": "@"},
-                            {"mountpoint": "@home", "name": "@home"},
-                            {"mountpoint": "@snapshots", "name": "@snapshots"},
-                            {"mountpoint": "@var_log", "name": "@var_log"}
+                            {"mountpoint": "/", "name": "@"},
+                            {"mountpoint": "/home", "name": "@home"},
+                            {"mountpoint": "/.snapshots", "name": "@snapshots"},
+                            {"mountpoint": "/var/log", "name": "@var_log"}
                         ],
                         "dev_path": null,
                         "flags": [],
