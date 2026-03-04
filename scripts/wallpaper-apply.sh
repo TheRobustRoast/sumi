@@ -11,6 +11,16 @@ CACHE_DIR="$HOME/.cache/sumi"
 
 mkdir -p "$CACHE_DIR"
 
+# ── Lock — prevent feedback loop from wallust-watcher ──────────
+# wallust-watcher watches current-wallpaper; writing to it would
+# re-trigger this script infinitely without this guard.
+LOCKFILE="$CACHE_DIR/.wallpaper-applying"
+if [[ -f "$LOCKFILE" ]]; then
+    exit 0
+fi
+touch "$LOCKFILE"
+trap 'rm -f "$LOCKFILE"' EXIT
+
 # ── Validate input ─────────────────────────────────────────────
 if [[ -z "$WALLPAPER" ]]; then
     echo "Error: No wallpaper path provided"
