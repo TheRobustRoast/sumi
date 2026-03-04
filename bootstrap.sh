@@ -281,43 +281,28 @@ LOCAL_IP=$(ip -4 addr show scope global \
 [[ -z "$LOCAL_IP" ]] && LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
 [[ -z "$LOCAL_IP" ]] && LOCAL_IP="this-machine"
 
-# Make sure archinstall is up to date
+# Reinstall archinstall to restore any files broken by previous runs
 info "Updating archinstall..."
 pacman -Sy --noconfirm archinstall 2>/dev/null || true
 
-# Patch archinstall luks.py: treat cryptsetup exit 5 ("device already open")
-# as success instead of crashing. In archinstall 3.x, udevd auto-opens the
-# newly luksFormat'd partition and the subsequent cryptsetup open call in
-# format_encrypted then fails with CRYPT_BUSY (exit 5).
-python3 - << 'LUKS_PATCH'
-import glob, pathlib, sys
-matches = glob.glob('/usr/lib/python*/site-packages/archinstall/lib/luks.py')
-if not matches:
-    print("WARNING: luks.py not found, skipping patch")
-    sys.exit(0)
-p = pathlib.Path(matches[0])
-src = p.read_text()
-if 'returncode == 5' in src:
-    sys.exit(0)  # already patched
-lines = src.splitlines()
-for i, line in enumerate(lines):
-    if 'result = run(cmd, input_data=passphrase)' in line:
-        ind = ' ' * (len(line) - len(line.lstrip()))
-        lines[i] = '\n'.join([
-            f'{ind}try:',
-            f'{ind}    result = run(cmd, input_data=passphrase)',
-            f'{ind}except Exception as _e:',
-            f'{ind}    if getattr(_e, "returncode", None) == 5:',
-            f'{ind}        pass  # mapper already open (udevd race) — reuse it',
-            f'{ind}    else:',
-            f'{ind}        raise',
-        ])
-        p.write_text('\n'.join(lines))
-        print(f"patched {p}")
-        break
-else:
-    print("WARNING: unlock target line not found in luks.py (version mismatch)")
-LUKS_PATCH
+# Wrap cryptsetup to handle exit 5 (CRYPT_BUSY / "device already open").
+# archinstall 3.x: udevd may auto-open a newly formatted LUKS partition
+# before archinstall's own `cryptsetup open` call → exit 5. Patching
+# archinstall's Python is fragile (IndentationErrors across versions), so
+# we intercept at the shell level instead: any open/luksOpen that returns 5
+# is treated as success (the mapper is already there, which is what we want).
+cat > /usr/local/bin/cryptsetup << 'CRYPTWRAP'
+#!/usr/bin/env bash
+/usr/bin/cryptsetup "$@"
+rc=$?
+if [[ $rc -eq 5 ]]; then
+    for arg in "$@"; do
+        case "$arg" in open|luksOpen) exit 0 ;; esac
+    done
+fi
+exit $rc
+CRYPTWRAP
+chmod +x /usr/local/bin/cryptsetup
 
 # ── Pre-flight: clear ALL stale disk state from previous attempts ──────────
 # archinstall 3.x: /dev/mapper/root from a prior run causes cryptsetup
