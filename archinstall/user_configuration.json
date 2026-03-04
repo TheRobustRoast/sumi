@@ -182,7 +182,7 @@
     ],
     "parallel downloads": 5,
     "profile_config": {
-        "gfx_driver": "All open-source (default)",
+        "gfx_driver": "AMD / ATI (open-source)",
         "greeter": "tuigreet",
         "profile": {
             "details": ["Hyprland"],

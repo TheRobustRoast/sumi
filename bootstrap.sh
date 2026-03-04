@@ -144,6 +144,16 @@ DISK_SIZE_MIB=$(lsblk -bdno SIZE "$NVME" | awk '{print int($1/1024/1024)}')
 ROOT_SIZE_MIB=$((DISK_SIZE_MIB - 1025 - 1))
 ok "Disk size: ${DISK_SIZE_MIB} MiB → root partition: ${ROOT_SIZE_MIB} MiB"
 
+# Detect GPU for the correct archinstall gfx_driver value
+if lspci 2>/dev/null | grep -qi "nvidia"; then
+    GFX_DRIVER="Nvidia (open-source)"
+elif lspci 2>/dev/null | grep -qiE "intel.*(graphics|vga|display)"; then
+    GFX_DRIVER="Intel (open-source)"
+else
+    GFX_DRIVER="AMD / ATI (open-source)"   # covers AMD, ATI, and unknown
+fi
+ok "GPU driver: $GFX_DRIVER"
+
 echo -e "${RED}${BLD}"
 echo "   ⚠  WARNING: This will WIPE $NVME completely."
 echo -e "${RST}"
@@ -233,12 +243,14 @@ jq \
     --arg host "$HOSTNAME" \
     --arg tz "$TIMEZONE" \
     --argjson root_mib "$ROOT_SIZE_MIB" \
+    --arg gfx "$GFX_DRIVER" \
     '
     .disk_config.device_modifications[0].device = $disk |
     .disk_config.device_modifications[0].partitions[1].size.value = $root_mib |
     .disk_config.device_modifications[0].partitions[1].size.unit = "MiB" |
     .hostname = $host |
-    .timezone = $tz
+    .timezone = $tz |
+    .profile_config.gfx_driver = $gfx
     ' "$CONF" > "$PATCHED_CONF"
 
 ok "Patched user_configuration.json"
@@ -246,6 +258,7 @@ echo -e "${DIM}     disk:     $NVME${RST}"
 echo -e "${DIM}     hostname: $HOSTNAME${RST}"
 echo -e "${DIM}     timezone: $TIMEZONE${RST}"
 echo -e "${DIM}     encrypt:  LUKS on root${RST}"
+echo -e "${DIM}     gpu:      $GFX_DRIVER${RST}"
 
 # Patch user_credentials.json
 jq \
