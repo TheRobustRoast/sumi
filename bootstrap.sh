@@ -208,13 +208,16 @@ HOSTNAME="${HOSTNAME:-framework}"
 # Timezone
 echo ""
 info "Timezone detection..."
-DETECTED_TZ=$(curl -s https://ipapi.co/timezone 2>/dev/null || echo "")
-if [[ -n "$DETECTED_TZ" ]]; then
+DETECTED_TZ=$(curl -s --max-time 5 https://ipapi.co/timezone 2>/dev/null || echo "")
+# Validate: a real timezone contains "/" (e.g. America/New_York) or is "UTC".
+# Discard rate-limit messages, HTML, or other garbage the API might return.
+if [[ "$DETECTED_TZ" =~ ^[A-Za-z_]+/[A-Za-z_/+\-]+$ ]] || [[ "$DETECTED_TZ" == "UTC" ]]; then
     prompt "Timezone [$DETECTED_TZ]: "
     read -r TIMEZONE
     TIMEZONE="${TIMEZONE:-$DETECTED_TZ}"
 else
-    prompt "Timezone (e.g., America/New_York): "
+    [[ -n "$DETECTED_TZ" ]] && warn "Timezone detection returned invalid value: '$DETECTED_TZ'"
+    prompt "Timezone (e.g., America/New_York) [UTC]: "
     read -r TIMEZONE
     TIMEZONE="${TIMEZONE:-UTC}"
 fi
