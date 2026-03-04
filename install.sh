@@ -148,6 +148,9 @@ link "$SCRIPT_DIR/nvim"     "$HOME/.config/nvim"
 
 # Single config files.
 link "$SCRIPT_DIR/foot/foot.ini"               "$HOME/.config/foot/foot.ini"
+# Copy (not symlink) so wallust can overwrite it on first wallpaper set
+[[ ! -f "$HOME/.config/foot/colors.ini" ]] && \
+    cp "$SCRIPT_DIR/foot/colors.ini" "$HOME/.config/foot/colors.ini" && s_ok "→ colors.ini (default)"
 link "$SCRIPT_DIR/fuzzel/fuzzel.ini"           "$HOME/.config/fuzzel/fuzzel.ini"
 link "$SCRIPT_DIR/dunst/dunstrc"               "$HOME/.config/dunst/dunstrc"
 link "$SCRIPT_DIR/cava/config"                 "$HOME/.config/cava/config"
