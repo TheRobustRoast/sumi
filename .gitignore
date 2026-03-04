@@ -26,3 +26,4 @@ nvim/plugin/
 # Wallpapers (user content, too large for git)
 wallpapers/
 
+.claude/settings.local.json
