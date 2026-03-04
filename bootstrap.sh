@@ -320,7 +320,8 @@ pacman -Sy --noconfirm archinstall 2>/dev/null || true
 INSTALL_EXIT=0
 archinstall \
     --config "$PATCHED_CONF" \
-    --creds "$PATCHED_CREDS" || INSTALL_EXIT=$?
+    --creds "$PATCHED_CREDS" \
+    --silent || INSTALL_EXIT=$?
 
 if [[ $INSTALL_EXIT -ne 0 ]]; then
     err "archinstall failed with exit code $INSTALL_EXIT"

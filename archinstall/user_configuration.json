@@ -189,7 +189,7 @@
         }
     },
     "script": "guided",
-    "silent": false,
+    "silent": true,
     "swap": {
         "enabled": true,
         "algorithm": "zstd"
