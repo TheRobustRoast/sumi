@@ -10,7 +10,7 @@
     },
     "debug": false,
     "disk_config": {
-        "config_type": "default_layout",
+        "config_type": "manual_partitioning",
         "device_modifications": [
             {
                 "device": "/dev/nvme0n1",
