@@ -138,6 +138,12 @@ if [[ ! -b "$NVME" ]]; then
     exit 1
 fi
 
+# Calculate root partition size from actual disk size.
+# EFI ends at 1025 MiB; leave 1 MiB at the end for the backup GPT header.
+DISK_SIZE_MIB=$(lsblk -bdno SIZE "$NVME" | awk '{print int($1/1024/1024)}')
+ROOT_SIZE_MIB=$((DISK_SIZE_MIB - 1025 - 1))
+ok "Disk size: ${DISK_SIZE_MIB} MiB → root partition: ${ROOT_SIZE_MIB} MiB"
+
 echo -e "${RED}${BLD}"
 echo "   ⚠  WARNING: This will WIPE $NVME completely."
 echo -e "${RST}"
@@ -226,8 +232,11 @@ jq \
     --arg disk "$NVME" \
     --arg host "$HOSTNAME" \
     --arg tz "$TIMEZONE" \
+    --argjson root_mib "$ROOT_SIZE_MIB" \
     '
     .disk_config.device_modifications[0].device = $disk |
+    .disk_config.device_modifications[0].partitions[1].size.value = $root_mib |
+    .disk_config.device_modifications[0].partitions[1].size.unit = "MiB" |
     .hostname = $host |
     .timezone = $tz
     ' "$CONF" > "$PATCHED_CONF"
