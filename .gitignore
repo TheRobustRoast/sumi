@@ -8,10 +8,6 @@
 .DS_Store
 Thumbs.db
 
-# Note: archinstall/user_credentials.json is a TEMPLATE with placeholder
-# values (!CHANGE_ME!) — safe to commit. bootstrap.sh patches real
-# credentials into a temp file at runtime which gets auto-cleaned.
-
 # Generated at runtime by wallust (per-wallpaper)
 # Don't commit these — they get regenerated on wallpaper change
 *.pyc
@@ -30,7 +26,3 @@ nvim/plugin/
 # Wallpapers (user content, too large for git)
 wallpapers/
 
-# Deprecated files (safe to delete locally)
-wofi/
-scripts/wofi-calc.sh
-wallust/templates/colors-wofi.css
