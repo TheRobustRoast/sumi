@@ -315,6 +315,15 @@ echo ""
 # Make sure archinstall is up to date
 pacman -Sy --noconfirm archinstall 2>/dev/null || true
 
+# ── Pre-flight: clear any leftover mounts from a previous attempt ─────────
+# archinstall 3.x bug: umount_all_existing() passes btrfs subvolume
+# mountpoints (e.g. /mnt/var/log) to lsblk, which only accepts block
+# devices. Unmounting /mnt beforehand prevents that cleanup path entirely.
+if mountpoint -q /mnt 2>/dev/null; then
+    info "Unmounting leftover /mnt mounts from previous attempt..."
+    umount -R /mnt 2>/dev/null || true
+fi
+
 # Capture exit code without letting set -e kill the script
 # (trap cleanup_secrets EXIT handles temp file deletion)
 INSTALL_EXIT=0
