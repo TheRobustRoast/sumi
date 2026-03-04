@@ -334,7 +334,19 @@ archinstall \
 
 if [[ $INSTALL_EXIT -ne 0 ]]; then
     err "archinstall failed with exit code $INSTALL_EXIT"
-    err "Check the output above for errors."
+    echo ""
+    ARCHLOG="/var/log/archinstall/install.log"
+    if [[ -f "$ARCHLOG" ]]; then
+        info "Uploading install log for debugging..."
+        LOG_URL=$(curl -s -F "file=@${ARCHLOG}" https://0x0.st 2>/dev/null || echo "")
+        if [[ -n "$LOG_URL" ]]; then
+            echo -e "${CYN}   Log URL: ${BLD}${LOG_URL}${RST}"
+        else
+            warn "Upload failed. Log is at: $ARCHLOG"
+        fi
+    else
+        warn "No install log found at $ARCHLOG"
+    fi
     exit 1
 fi
 
