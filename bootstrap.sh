@@ -371,15 +371,27 @@ dialog --backtitle "$BT" \
   If it fails, open in a browser:
   http://${LOCAL_IP}:7777" 14 52
 
-# Capture exit code without letting set -e kill the script
+# Capture exit code without letting set -e kill the script.
+# Redirect stderr to a temp file — archinstall crashes (unhandled
+# Python exceptions) print to stderr, not the log file.
 INSTALL_EXIT=0
+STDERR_LOG=$(mktemp)
 archinstall \
     --config "$PATCHED_CONF" \
     --creds "$PATCHED_CREDS" \
-    --silent || INSTALL_EXIT=$?
+    --silent 2>"$STDERR_LOG" || INSTALL_EXIT=$?
 
 if [[ $INSTALL_EXIT -ne 0 ]]; then
     ARCHLOG="/var/log/archinstall/install.log"
+
+    # Append stderr to the log so the error page shows the full picture
+    {
+        echo ""
+        echo "=== stderr (unhandled exceptions / crash output) ==="
+        cat "$STDERR_LOG" 2>/dev/null || echo "(no stderr output)"
+        echo "=== archinstall exit code: $INSTALL_EXIT ==="
+    } >> "$ARCHLOG"
+    rm -f "$STDERR_LOG"
     PORT=7777
 
     # Build a self-contained HTML error page from the install log
@@ -486,6 +498,7 @@ PYEOF
     exit 1
 fi
 
+rm -f "$STDERR_LOG"
 ok "archinstall completed successfully!"
 
 # ── 7. Create btrfs subvolumes ────────────────────────────────
