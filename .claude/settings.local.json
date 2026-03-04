@@ -8,7 +8,16 @@
       "WebFetch(domain:typevar.dev)",
       "WebFetch(domain:wiki.hyprland.org)",
       "WebFetch(domain:wiki.hypr.land)",
-      "WebFetch(domain:gist.github.com)"
+      "WebFetch(domain:gist.github.com)",
+      "WebFetch(domain:itsfoss.gitlab.io)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:omarchy.org)",
+      "Bash(curl -s \"https://api.github.com/repos/basecamp/omarchy/contents/\")",
+      "Bash(python3 -c \"import json,sys; [print\\(x[''name''], x[''type'']\\) for x in json.load\\(sys.stdin\\)]\")",
+      "Bash(curl -s \"https://api.github.com/repos/basecamp/omarchy/contents/install\")",
+      "Bash(python3 -c \"import json,sys; [print\\(x[''name'']\\) for x in json.load\\(sys.stdin\\)]\")",
+      "Bash(curl -s \"https://api.github.com/repos/basecamp/omarchy/contents/bin\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/basecamp/omarchy/main/boot.sh\")"
     ]
   }
 }
