@@ -1,0 +1,15 @@
+/* Default colors — overwritten by wallust on first wallpaper set */
+@define-color bg         #0a0a0a;
+@define-color fg         #c8c8c8;
+@define-color surface0   #1a1a1a;
+@define-color surface1   #2a2a2a;
+@define-color surface2   #3a3a3a;
+@define-color overlay    #4a4a4a;
+@define-color muted      #6a6a6a;
+@define-color subtle     #8a8a8a;
+@define-color text       #d4d4d4;
+@define-color accent     #7aa2f7;
+@define-color accent_dim #5a82d7;
+@define-color urgent     #f7768e;
+@define-color warn       #e0af68;
+@define-color ok         #9ece6a;

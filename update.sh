@@ -78,6 +78,7 @@ done
 # Waybar
 deploy "$SCRIPT_DIR/waybar/config.jsonc"     "$CONFIG_DIR/waybar/config.jsonc"
 deploy "$SCRIPT_DIR/waybar/style.css"        "$CONFIG_DIR/waybar/style.css"
+deploy "$SCRIPT_DIR/waybar/colors.css"       "$CONFIG_DIR/waybar/colors.css"
 
 # Foot
 deploy "$SCRIPT_DIR/foot/foot.ini"           "$CONFIG_DIR/foot/foot.ini"
