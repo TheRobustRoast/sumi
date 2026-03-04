@@ -163,7 +163,9 @@ if [[ -z "$USERNAME" ]]; then
     warn "Defaulting to 'user'"
 fi
 
-# Password
+# Single password — used for user, root, and LUKS disk encryption
+info "One password will be used for: user login, root, and LUKS disk encryption."
+info "On cold boot, unlocking LUKS will automatically log you in."
 while true; do
     prompt "Password: "
     read -rs PASSWORD
@@ -177,32 +179,9 @@ while true; do
         warn "Passwords don't match. Try again."
     fi
 done
-
-# Root password (optional — same as user by default)
-prompt "Root password (Enter to use same as user): "
-read -rs ROOT_PASSWORD
-echo ""
-if [[ -z "$ROOT_PASSWORD" ]]; then
-    ROOT_PASSWORD="$PASSWORD"
-    ok "Root password set to match user password"
-fi
-
-# LUKS encryption passphrase
-echo ""
-info "Disk encryption (LUKS)"
-while true; do
-    prompt "Encryption passphrase: "
-    read -rs LUKS_PASS
-    echo ""
-    prompt "Confirm passphrase: "
-    read -rs LUKS_PASS2
-    echo ""
-    if [[ "$LUKS_PASS" == "$LUKS_PASS2" ]]; then
-        break
-    else
-        warn "Passphrases don't match. Try again."
-    fi
-done
+ROOT_PASSWORD="$PASSWORD"
+LUKS_PASS="$PASSWORD"
+ok "User, root, and LUKS passwords set to the same value"
 
 # Hostname
 echo ""
@@ -286,7 +265,7 @@ echo -e "  Filesystem:  btrfs (zstd, subvols: @, @home, @snapshots, @var_log)"
 echo -e "  Encryption:  LUKS on root partition"
 echo -e "  Bootloader:  systemd-boot"
 echo -e "  Hostname:    $HOSTNAME"
-echo -e "  User:        $USERNAME (sudo)"
+echo -e "  User:        $USERNAME (sudo, root & LUKS share same password)"
 echo -e "  Timezone:    $TIMEZONE"
 echo -e "  Audio:       PipeWire"
 echo -e "  Network:     NetworkManager"
@@ -409,7 +388,7 @@ echo -e "${DIM}║${RST}  3. sumi installs automatically          ${DIM}║${RST
 echo -e "${DIM}║${RST}  4. Reboot again for greetd + plymouth   ${DIM}║${RST}"
 echo -e "${DIM}║${RST}                                          ${DIM}║${RST}"
 echo -e "${DIM}║${RST}  After the second reboot, you'll get:    ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  • Plymouth TUI unlock → greetd login    ${DIM}║${RST}"
+echo -e "${DIM}║${RST}  • Plymouth TUI unlock → auto login      ${DIM}║${RST}"
 echo -e "${DIM}║${RST}  • Full Hyprland desktop with theming    ${DIM}║${RST}"
 echo -e "${DIM}║${RST}  • SUPER+X for control center            ${DIM}║${RST}"
 echo -e "${DIM}║${RST}  • SUPER+/ for keybind cheatsheet        ${DIM}║${RST}"

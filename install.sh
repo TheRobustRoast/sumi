@@ -216,13 +216,36 @@ done
 
 # ── 4. Setup greetd ─────────────────────────────────────────
 echo ""
-info "Setting up greetd login manager..."
+info "Setting up greetd (autologin after LUKS unlock)..."
 if [[ -f /etc/greetd/config.toml ]]; then
     sudo cp /etc/greetd/config.toml /etc/greetd/config.toml.bak
 fi
-sudo cp "$SCRIPT_DIR/greetd/config.toml" /etc/greetd/config.toml
+
+# Generate config dynamically so [initial_session] uses the actual username.
+# [initial_session] runs once on cold boot — after LUKS unlock the user lands
+# straight in Hyprland without a second password prompt.
+# On logout greetd falls back to [default_session] (the tuigreet login prompt).
+sudo tee /etc/greetd/config.toml > /dev/null << GREETDCFG
+# ╔══════════════════════════════════════════════════════════════╗
+# ║  greetd — TUI Login Manager                                 ║
+# ╚══════════════════════════════════════════════════════════════╝
+
+[terminal]
+vt = 1
+
+# Cold-boot autologin: LUKS passphrase = authentication, no second prompt needed.
+[initial_session]
+command = "$HOME/.config/hypr/scripts/hyprland-wrapped.sh"
+user = "$USER"
+
+# Fallback after logout / lock: interactive tuigreet login.
+[default_session]
+command = "tuigreet --time --time-format '%Y-%m-%d %H:%M' --greeting '╔══════════════════════════════════╗\n║     framework :: sumi login   ║\n╚══════════════════════════════════╝' --remember --remember-session --asterisks --cmd '$HOME/.config/hypr/scripts/hyprland-wrapped.sh' --theme 'border=darkgray;text=white;prompt=cyan;time=darkgray;action=darkgray;button=cyan;container=default;input=white'"
+user = "greeter"
+GREETDCFG
+
 sudo systemctl enable greetd.service 2>/dev/null || true
-ok "greetd configured and enabled"
+ok "greetd configured — LUKS unlock → autologin as $USER"
 
 # ── 5. Setup Plymouth ───────────────────────────────────────
 info "Setting up Plymouth TUI boot theme..."
