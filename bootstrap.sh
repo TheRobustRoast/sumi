@@ -315,14 +315,33 @@ echo ""
 # Make sure archinstall is up to date
 pacman -Sy --noconfirm archinstall 2>/dev/null || true
 
-# ── Pre-flight: clear any leftover mounts from a previous attempt ─────────
-# archinstall 3.x bug: umount_all_existing() passes btrfs subvolume
-# mountpoints (e.g. /mnt/var/log) to lsblk, which only accepts block
-# devices. Unmounting /mnt beforehand prevents that cleanup path entirely.
+# ── Pre-flight: clear ALL stale disk state from previous attempts ──────────
+# archinstall 3.x bug: umount_all_existing() passes btrfs subvolume paths
+# (e.g. /mnt/@var_log) to lsblk, which only accepts block devices.
+# Root cause: LUKS container left open → lsblk reports btrfs subvol paths
+# as mountpoints → archinstall calls lsblk on them → DiskError.
+# Fix: unmount, close LUKS, then wipe signatures so archinstall finds a
+# completely blank disk and has nothing to try to unmount.
+
+# 1. Unmount everything under /mnt
 if mountpoint -q /mnt 2>/dev/null; then
-    info "Unmounting leftover /mnt mounts from previous attempt..."
+    info "Unmounting leftover /mnt mounts..."
     umount -R /mnt 2>/dev/null || true
 fi
+
+# 2. Close any open LUKS containers on the target disk
+for dm in /dev/mapper/*; do
+    [[ "$dm" == "/dev/mapper/control" ]] && continue
+    backing=$(cryptsetup status "$dm" 2>/dev/null | awk '/device:/ {print $2}') || true
+    if [[ -n "$backing" && "$backing" == "${NVME}"* ]]; then
+        info "Closing LUKS mapper: $(basename "$dm")"
+        cryptsetup close "$dm" 2>/dev/null || true
+    fi
+done
+
+# 3. Wipe all FS signatures and partition table → archinstall sees blank disk
+wipefs -af "$NVME" 2>/dev/null || true
+partprobe "$NVME" 2>/dev/null || true
 
 # Capture exit code without letting set -e kill the script
 # (trap cleanup_secrets EXIT handles temp file deletion)
@@ -353,6 +372,12 @@ try:
     log = pathlib.Path(log_path).read_text(errors='replace')
 except Exception as e:
     log = f"Log file not available ({e})"
+
+# Extract just the error section: from the last ERROR line to end
+lines = log.splitlines()
+last_err = max((i for i, l in enumerate(lines) if '- ERROR -' in l), default=0)
+error_section = '\n'.join(lines[max(0, last_err - 1):])
+
 page = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -360,23 +385,37 @@ page = f"""<!DOCTYPE html>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>sumi :: install error</title>
   <style>
-    * {{ box-sizing: border-box }}
-    body {{ background: #0f0f17; color: #cdd6f4; font-family: monospace;
-            padding: 2em; max-width: 1400px; margin: 0 auto }}
-    h1  {{ color: #f38ba8; margin: 0 0 .3em }}
-    .meta {{ color: #6c7086; font-size: .85em; margin-bottom: 2em }}
-    .meta span {{ color: #a6adc8 }}
-    pre {{ background: #1e1e2e; padding: 1.5em; border-radius: 8px;
-           overflow: auto; line-height: 1.6; font-size: .8em;
-           white-space: pre-wrap; word-break: break-all;
-           border: 1px solid #313244 }}
+    *{{box-sizing:border-box}}
+    body{{background:#0f0f17;color:#cdd6f4;font-family:monospace;padding:2em;max-width:1400px;margin:0 auto}}
+    h1{{color:#f38ba8;margin:0 0 .4em}}
+    .meta{{color:#6c7086;font-size:.85em;margin-bottom:1.5em}}
+    .meta span{{color:#a6adc8}}
+    .tabs{{display:flex;gap:.5em;margin-bottom:1em}}
+    .tabs button{{background:#1e1e2e;border:1px solid #313244;color:#cdd6f4;
+                  padding:.4em 1.2em;border-radius:6px;cursor:pointer;font:inherit;font-size:.9em}}
+    .tabs button.active{{background:#313244;color:#f38ba8;border-color:#f38ba8}}
+    pre{{background:#1e1e2e;padding:1.5em;border-radius:8px;overflow:auto;
+         line-height:1.6;font-size:.8em;white-space:pre-wrap;word-break:break-all;
+         border:1px solid #313244;margin:0}}
   </style>
 </head>
 <body>
   <h1>sumi :: archinstall failed</h1>
-  <p class="meta">exit code <span>{exit_code}</span> &nbsp;·&nbsp;
-     log <span>{log_path}</span></p>
-  <pre>{html.escape(log)}</pre>
+  <p class="meta">exit code <span>{exit_code}</span> &nbsp;·&nbsp; log <span>{log_path}</span></p>
+  <div class="tabs">
+    <button class="active" onclick="show('error')" id="tab-error">Error</button>
+    <button onclick="show('full')" id="tab-full">Full Log</button>
+  </div>
+  <pre id="pane-error">{html.escape(error_section)}</pre>
+  <pre id="pane-full" style="display:none">{html.escape(log)}</pre>
+  <script>
+  function show(id){{
+    ['error','full'].forEach(function(p){{
+      document.getElementById('pane-'+p).style.display=p===id?'':'none';
+      document.getElementById('tab-'+p).className=p===id?'active':'';
+    }});
+  }}
+  </script>
 </body>
 </html>"""
 pathlib.Path(web_dir + "/index.html").write_text(page)
