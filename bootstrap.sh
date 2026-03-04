@@ -315,6 +315,40 @@ echo ""
 # Make sure archinstall is up to date
 pacman -Sy --noconfirm archinstall 2>/dev/null || true
 
+# Patch archinstall luks.py: treat cryptsetup exit 5 ("device already open")
+# as success instead of crashing. In archinstall 3.x, udevd auto-opens the
+# newly luksFormat'd partition and the subsequent cryptsetup open call in
+# format_encrypted then fails with CRYPT_BUSY (exit 5).
+python3 - << 'LUKS_PATCH'
+import glob, pathlib, sys
+matches = glob.glob('/usr/lib/python*/site-packages/archinstall/lib/luks.py')
+if not matches:
+    print("WARNING: luks.py not found, skipping patch")
+    sys.exit(0)
+p = pathlib.Path(matches[0])
+src = p.read_text()
+if 'returncode == 5' in src:
+    sys.exit(0)  # already patched
+lines = src.splitlines()
+for i, line in enumerate(lines):
+    if 'result = run(cmd, input_data=passphrase)' in line:
+        ind = ' ' * (len(line) - len(line.lstrip()))
+        lines[i] = '\n'.join([
+            f'{ind}try:',
+            f'{ind}    result = run(cmd, input_data=passphrase)',
+            f'{ind}except Exception as _e:',
+            f'{ind}    if getattr(_e, "returncode", None) == 5:',
+            f'{ind}        pass  # mapper already open (udevd race) — reuse it',
+            f'{ind}    else:',
+            f'{ind}        raise',
+        ])
+        p.write_text('\n'.join(lines))
+        print(f"patched {p}")
+        break
+else:
+    print("WARNING: unlock target line not found in luks.py (version mismatch)")
+LUKS_PATCH
+
 # ── Pre-flight: clear ALL stale disk state from previous attempts ──────────
 # archinstall 3.x: /dev/mapper/root from a prior run causes cryptsetup
 # to fail with exit 5 ("device already exists") when it tries to open the
