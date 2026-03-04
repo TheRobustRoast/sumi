@@ -5,7 +5,10 @@
       "Bash(ls -la \"hypr/{conf.d}/\")",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:deepwiki.com)",
-      "WebFetch(domain:typevar.dev)"
+      "WebFetch(domain:typevar.dev)",
+      "WebFetch(domain:wiki.hyprland.org)",
+      "WebFetch(domain:wiki.hypr.land)",
+      "WebFetch(domain:gist.github.com)"
     ]
   }
 }
