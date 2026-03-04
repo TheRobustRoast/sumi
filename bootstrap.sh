@@ -315,11 +315,19 @@ chmod +x /usr/local/bin/cryptsetup
 # Fix: drop the page/dentry/inode cache to release kernel FS references,
 # then explicitly close the root mapper before the general DM cleanup.
 
-# 1. Unmount everything under /mnt
-if mountpoint -q /mnt 2>/dev/null; then
+# 1. Unmount everything under /mnt.
+# Don't use `mountpoint -q /mnt` — btrfs subvol mounts from a previous run
+# land at /mnt/@ /mnt/@home etc., so /mnt itself is NOT a mountpoint and
+# the check returns false, silently skipping the umount entirely.
+# Instead: enumerate all mounts under /mnt with findmnt and tear them down
+# deepest-first, then lazy-unmount anything still stubborn.
+if findmnt -r -n -o TARGET | grep -q '^/mnt'; then
     info "Unmounting leftover /mnt mounts..."
-    umount -R /mnt 2>/dev/null || true
+    while IFS= read -r mnt; do
+        umount "$mnt" 2>/dev/null || umount -l "$mnt" 2>/dev/null || true
+    done < <(findmnt -r -n -o TARGET | grep '^/mnt' | sort -r)
 fi
+umount -R /mnt 2>/dev/null || true
 
 # 2. Drop caches so the kernel releases btrfs inode/dentry refs on the mapper
 sync
