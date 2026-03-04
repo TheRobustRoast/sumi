@@ -73,9 +73,7 @@
             "8": "8",
             "9": "9",
             "10": "0",
-            "default": "{id}",
-            "active": " {id}*",
-            "urgent": " {id}!"
+            "default": "?"
         },
         "on-click": "activate",
         "sort-by-number": true,
