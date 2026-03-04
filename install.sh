@@ -1,448 +1,351 @@
 #!/usr/bin/env bash
 # ╔══════════════════════════════════════════════════════════════╗
-# ║  sumi — Post-Install Bootstrap Script                     ║
+# ║  sumi — rice installer                                       ║
 # ║                                                              ║
-# ║  Run this AFTER archinstall completes and you've rebooted    ║
-# ║  into your new system. It deploys all config files and       ║
-# ║  sets up the full rice.                                      ║
-# ║                                                              ║
-# ║  Usage: git clone <repo> ~/sumi && cd ~/sumi           ║
-# ║         chmod +x install.sh && ./install.sh                  ║
+# ║  Run as your normal user after the first boot.               ║
+# ║  Usage:  ~/sumi/install.sh                                   ║
+# ║  Update: sumi-update  (git pull + re-run)                    ║
 # ╚══════════════════════════════════════════════════════════════╝
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_DIR="$HOME/.config"
-RED='\033[0;31m'
-GRN='\033[0;32m'
-CYN='\033[0;36m'
-DIM='\033[0;90m'
-RST='\033[0m'
 
-echo -e "${DIM}╔══════════════════════════════════════╗${RST}"
-echo -e "${CYN}║   sumi :: framework 13 installer   ║${RST}"
-echo -e "${DIM}╚══════════════════════════════════════╝${RST}"
-echo ""
+# ── Catppuccin Mocha gum env ─────────────────────────────────────
+export GUM_INPUT_CURSOR_FOREGROUND="#f38ba8"
+export GUM_INPUT_PROMPT_FOREGROUND="#cba6f7"
+export GUM_CONFIRM_SELECTED_BACKGROUND="#a6e3a1"
+export GUM_CONFIRM_SELECTED_FOREGROUND="#1e1e2e"
+export GUM_CONFIRM_UNSELECTED_BACKGROUND="#313244"
+export GUM_CONFIRM_UNSELECTED_FOREGROUND="#cdd6f4"
+export GUM_SPIN_SPINNER="dot"
+export GUM_SPIN_SPINNER_FOREGROUND="#cba6f7"
+export GUM_SPIN_TITLE_FOREGROUND="#cdd6f4"
 
-# ── Helper functions ─────────────────────────────────────────
-info()  { echo -e "${CYN}:: ${RST}$1"; }
-ok()    { echo -e "${GRN}   ✓${RST} $1"; }
-warn()  { echo -e "${RED}   !${RST} $1"; }
+# ── Helpers ──────────────────────────────────────────────────────
+s_step()    { gum style --foreground '#89b4fa' "  · $1"; }
+s_ok()      { gum style --foreground '#a6e3a1' "  ✓  $1"; }
+s_fail()    { gum style --foreground '#f38ba8' "  ✗  $1"; }
+s_warn()    { gum style --foreground '#f9e2af' "  !  $1"; }
+s_section() { echo ""; gum style --foreground '#cba6f7' --bold "  ── $1"; echo ""; }
 
-backup_if_exists() {
-    if [[ -e "$1" ]]; then
-        local backup="$1.bak.$(date +%s)"
-        mv "$1" "$backup"
-        warn "Backed up existing: $1 → $backup"
-    fi
-}
-
-deploy() {
-    local src="$1"
-    local dst="$2"
+# Symlink src → dst.  Re-running is always safe — just refreshes the link.
+# Backs up real files/dirs on first encounter; replaces existing symlinks silently.
+link() {
+    local src="$1" dst="$2"
     mkdir -p "$(dirname "$dst")"
-    backup_if_exists "$dst"
-    cp -r "$src" "$dst"
-    ok "Deployed: $dst"
+    if [[ -L "$dst" ]]; then
+        rm -f "$dst"
+    elif [[ -e "$dst" ]]; then
+        local bak="${dst}.bak.$(date +%s)"
+        mv "$dst" "$bak"
+        s_warn "Backed up: $(basename "$dst") → $(basename "$bak")"
+    fi
+    ln -sf "$src" "$dst"
+    s_ok "→ $(basename "$dst")"
 }
 
-# ── 0. Pre-flight checks ──────────────────────────────────
-info "Running pre-flight checks..."
-
-# Must not be root
-if [[ "$EUID" -eq 0 ]]; then
-    warn "Do not run this script as root. Run as your normal user."
-    exit 1
-fi
-
-# Must be on Arch
-if [[ ! -f /etc/arch-release ]]; then
-    warn "This script is designed for Arch Linux."
-    exit 1
-fi
-
-# Must have internet
-if ! ping -c 1 -W 3 archlinux.org &>/dev/null; then
-    warn "No internet connection detected."
-    exit 1
-fi
-
-# Check critical base commands
-for cmd in git sudo pacman hyprctl; do
-    if command -v "$cmd" &>/dev/null; then
-        ok "$cmd found"
-    else
-        warn "$cmd not found — install it first"
-        exit 1
-    fi
-done
-
-ok "Pre-flight checks passed"
+# ── Welcome ──────────────────────────────────────────────────────
+clear
+gum style \
+    --border rounded --border-foreground '#313244' \
+    --margin "1 2" --padding "1 4" \
+    "$(gum style --foreground '#f38ba8' --bold 'sumi') $(gum style --foreground '#45475a' '::') $(gum style --foreground '#cdd6f4' 'rice installer')" \
+    "" \
+    "$(gum style --foreground '#6c7086' 'Framework 13 AMD  ·  Hyprland  ·  Catppuccin Mocha')"
 echo ""
 
-# ── 1. Install AUR helper (yay) ─────────────────────────────
-info "Checking for yay..."
+# ── 0. Pre-flight ────────────────────────────────────────────────
+s_section "Pre-flight"
+
+[[ "$EUID" -eq 0 ]] && { s_fail "Run as your normal user, not root."; exit 1; }
+[[ ! -f /etc/arch-release ]] && { s_fail "Arch Linux only."; exit 1; }
+
+gum spin --title "  Checking internet..." -- ping -c 1 -W 5 archlinux.org || {
+    s_fail "No internet connection."
+    exit 1
+}
+
+for cmd in git sudo pacman; do
+    command -v "$cmd" &>/dev/null && s_ok "$cmd found" || { s_fail "$cmd not found"; exit 1; }
+done
+
+# ── 1. AUR helper (yay) ──────────────────────────────────────────
+s_section "AUR Helper"
+
 if ! command -v yay &>/dev/null; then
-    info "Installing yay..."
+    s_step "Installing yay..."
+    gum spin --title "  Cloning yay-bin..." -- \
+        git clone https://aur.archlinux.org/yay-bin.git /tmp/yay-bin
+    (cd /tmp/yay-bin && makepkg -si --noconfirm)
     rm -rf /tmp/yay-bin
-    git clone https://aur.archlinux.org/yay-bin.git /tmp/yay-bin
-    cd /tmp/yay-bin
-    makepkg -si --noconfirm
-    cd "$SCRIPT_DIR"
-    ok "yay installed"
+    s_ok "yay installed"
 else
-    ok "yay already installed"
+    s_ok "yay already installed"
 fi
 
-# ── 2. Install additional AUR packages ──────────────────────
-info "Installing AUR packages..."
-yay -S --needed --noconfirm \
-    wallust \
-    bluetuith \
-    framework-laptop-kmod-dkms-git \
-    wtype \
-    bibata-cursor-theme \
-    || warn "Some AUR packages may have failed — check output above"
+# ── 2. AUR packages ──────────────────────────────────────────────
+s_section "AUR Packages"
 
-# ── 2a. Ensure required pacman packages ────────────────────
-info "Verifying required packages..."
-sudo pacman -S --needed --noconfirm \
-    inotify-tools \
-    slurp grim \
-    wl-clipboard cliphist \
-    jq fzf \
-    hyprpicker \
-    zsh-autosuggestions zsh-syntax-highlighting \
-    python bc \
-    playerctl brightnessctl \
-    tmux \
-    npm nodejs \
-    shellcheck shfmt \
-    docker docker-compose \
-    lsof \
-    direnv \
-    rsync \
-    fuzzel \
-    doggo \
-    || warn "Some packages may have failed — check output above"
+s_step "Installing AUR packages..."
+gum spin --title "  yay (this may take a while)..." -- \
+    yay -S --needed --noconfirm \
+        wallust \
+        bluetuith \
+        framework-laptop-kmod-dkms-git \
+        bibata-cursor-theme \
+    || s_warn "Some AUR packages failed — check output above"
+s_ok "AUR packages done"
 
-# ── 3. Deploy configs ───────────────────────────────────────
-echo ""
-info "Deploying configuration files..."
+# ── 3. Extra pacman packages ─────────────────────────────────────
+s_section "Extra Packages"
 
-# Hyprland
-deploy "$SCRIPT_DIR/hypr/hyprland.conf"     "$CONFIG_DIR/hypr/hyprland.conf"
-deploy "$SCRIPT_DIR/hypr/hyprlock.conf"      "$CONFIG_DIR/hypr/hyprlock.conf"
-deploy "$SCRIPT_DIR/hypr/hypridle.conf"      "$CONFIG_DIR/hypr/hypridle.conf"
-deploy "$SCRIPT_DIR/hypr/hyprpaper.conf"     "$CONFIG_DIR/hypr/hyprpaper.conf"
-mkdir -p "$CONFIG_DIR/hypr/conf.d"
+gum spin --title "  pacman --needed..." -- \
+    sudo pacman -S --needed --noconfirm \
+        shellcheck shfmt \
+        docker docker-compose \
+        lsof direnv rsync \
+    || s_warn "Some packages failed — check output above"
+s_ok "Packages up to date"
+
+# ── 4. Link configs ──────────────────────────────────────────────
+s_section "Configs"
+s_step "Linking dotfiles (symlinks — git pull = instant update)..."
+
+# Hyprland configs (individual files so ~/.config/hypr/ stays a real dir,
+# allowing other apps / scripts to create files alongside these).
+mkdir -p "$HOME/.config/hypr/conf.d"
+link "$SCRIPT_DIR/hypr/hyprland.conf"  "$HOME/.config/hypr/hyprland.conf"
+link "$SCRIPT_DIR/hypr/hyprlock.conf"  "$HOME/.config/hypr/hyprlock.conf"
+link "$SCRIPT_DIR/hypr/hypridle.conf"  "$HOME/.config/hypr/hypridle.conf"
+link "$SCRIPT_DIR/hypr/hyprpaper.conf" "$HOME/.config/hypr/hyprpaper.conf"
 for f in "$SCRIPT_DIR/hypr/conf.d/"*; do
-    deploy "$f" "$CONFIG_DIR/hypr/conf.d/$(basename "$f")"
+    link "$f" "$HOME/.config/hypr/conf.d/$(basename "$f")"
 done
 
-# Scripts
-mkdir -p "$CONFIG_DIR/hypr/scripts"
-for f in "$SCRIPT_DIR/scripts/"*.sh; do
-    deploy "$f" "$CONFIG_DIR/hypr/scripts/$(basename "$f")"
-    chmod +x "$CONFIG_DIR/hypr/scripts/$(basename "$f")"
-done
+# Scripts: symlinked as a dir so the whole folder updates on git pull.
+# Keybinds reference $HOME/.config/hypr/scripts/...
+link "$SCRIPT_DIR/scripts" "$HOME/.config/hypr/scripts"
 
-# Waybar
-deploy "$SCRIPT_DIR/waybar/config.jsonc"     "$CONFIG_DIR/waybar/config.jsonc"
-deploy "$SCRIPT_DIR/waybar/style.css"        "$CONFIG_DIR/waybar/style.css"
-deploy "$SCRIPT_DIR/waybar/colors.css"       "$CONFIG_DIR/waybar/colors.css"
+# Self-contained config dirs — symlink the whole dir.
+link "$SCRIPT_DIR/waybar"   "$HOME/.config/waybar"
+link "$SCRIPT_DIR/yazi"     "$HOME/.config/yazi"
+link "$SCRIPT_DIR/btop"     "$HOME/.config/btop"
+link "$SCRIPT_DIR/wallust"  "$HOME/.config/wallust"
+link "$SCRIPT_DIR/nvim"     "$HOME/.config/nvim"
 
-# Foot
-deploy "$SCRIPT_DIR/foot/foot.ini"           "$CONFIG_DIR/foot/foot.ini"
+# Single config files.
+link "$SCRIPT_DIR/foot/foot.ini"               "$HOME/.config/foot/foot.ini"
+link "$SCRIPT_DIR/fuzzel/fuzzel.ini"           "$HOME/.config/fuzzel/fuzzel.ini"
+link "$SCRIPT_DIR/dunst/dunstrc"               "$HOME/.config/dunst/dunstrc"
+link "$SCRIPT_DIR/cava/config"                 "$HOME/.config/cava/config"
+link "$SCRIPT_DIR/lazygit/config.yml"          "$HOME/.config/lazygit/config.yml"
+link "$SCRIPT_DIR/gtk-3.0/settings.ini"        "$HOME/.config/gtk-3.0/settings.ini"
+link "$SCRIPT_DIR/gtk-4.0/settings.ini"        "$HOME/.config/gtk-4.0/settings.ini"
+link "$SCRIPT_DIR/xdg/mimeapps.list"           "$HOME/.config/mimeapps.list"
+link "$SCRIPT_DIR/xdg/hyprland-portals.conf"   "$HOME/.config/xdg-desktop-portal/portals.conf"
+link "$SCRIPT_DIR/icons/default/index.theme"   "$HOME/.icons/default/index.theme"
+link "$SCRIPT_DIR/starship/starship.toml"      "$HOME/.config/starship.toml"
+link "$SCRIPT_DIR/tmux/tmux.conf"              "$HOME/.tmux.conf"
+link "$SCRIPT_DIR/zsh/.zshrc"                  "$HOME/.zshrc"
+[[ -f "$SCRIPT_DIR/.editorconfig" ]] && \
+    link "$SCRIPT_DIR/.editorconfig"           "$HOME/.editorconfig"
 
-# Fuzzel
-deploy "$SCRIPT_DIR/fuzzel/fuzzel.ini"       "$CONFIG_DIR/fuzzel/fuzzel.ini"
-cp "$SCRIPT_DIR/wallust/templates/colors-fuzzel.ini" "$CONFIG_DIR/fuzzel/colors.ini" 2>/dev/null || true
-
-# Dunst
-deploy "$SCRIPT_DIR/dunst/dunstrc"           "$CONFIG_DIR/dunst/dunstrc"
-mkdir -p "$CONFIG_DIR/dunst/dunstrc.d"
-
-# Yazi (TUI file manager)
-deploy "$SCRIPT_DIR/yazi/yazi.toml"          "$CONFIG_DIR/yazi/yazi.toml"
-deploy "$SCRIPT_DIR/yazi/theme.toml"         "$CONFIG_DIR/yazi/theme.toml"
-
-# Cava (TUI audio visualizer)
-deploy "$SCRIPT_DIR/cava/config"             "$CONFIG_DIR/cava/config"
-
-# Lazygit
-deploy "$SCRIPT_DIR/lazygit/config.yml"      "$CONFIG_DIR/lazygit/config.yml"
-
-# Neovim
-deploy "$SCRIPT_DIR/nvim/init.lua"           "$CONFIG_DIR/nvim/init.lua"
-
-# Tmux
-deploy "$SCRIPT_DIR/tmux/tmux.conf"          "$HOME/.tmux.conf"
-
-# Starship prompt
-deploy "$SCRIPT_DIR/starship/starship.toml"  "$CONFIG_DIR/starship.toml"
-
-# Btop
-deploy "$SCRIPT_DIR/btop/btop.conf"                "$CONFIG_DIR/btop/btop.conf"
-mkdir -p "$CONFIG_DIR/btop/themes"
-deploy "$SCRIPT_DIR/btop/themes/sumi.theme"     "$CONFIG_DIR/btop/themes/sumi.theme"
-
-# Wallust
-deploy "$SCRIPT_DIR/wallust/wallust.toml"    "$CONFIG_DIR/wallust/wallust.toml"
-mkdir -p "$CONFIG_DIR/wallust/templates"
-for f in "$SCRIPT_DIR/wallust/templates/"*; do
-    deploy "$f" "$CONFIG_DIR/wallust/templates/$(basename "$f")"
-done
-
-# GTK theming (dark mode + cursor + font)
-deploy "$SCRIPT_DIR/gtk-3.0/settings.ini"         "$CONFIG_DIR/gtk-3.0/settings.ini"
-deploy "$SCRIPT_DIR/gtk-4.0/settings.ini"         "$CONFIG_DIR/gtk-4.0/settings.ini"
-
-# XDG defaults (mime associations + portal config)
-deploy "$SCRIPT_DIR/xdg/mimeapps.list"            "$CONFIG_DIR/mimeapps.list"
-deploy "$SCRIPT_DIR/xdg/hyprland-portals.conf"    "$CONFIG_DIR/xdg-desktop-portal/portals.conf"
-
-# Cursor theme
-mkdir -p "$HOME/.icons/default"
-deploy "$SCRIPT_DIR/icons/default/index.theme"    "$HOME/.icons/default/index.theme"
-
-# Systemd user services
-mkdir -p "$HOME/.config/systemd/user"
+# Systemd user services.
 for f in "$SCRIPT_DIR/systemd/user/"*; do
-    deploy "$f" "$HOME/.config/systemd/user/$(basename "$f")"
+    link "$f" "$HOME/.config/systemd/user/$(basename "$f")"
 done
 
-# ── 4. Setup greetd ─────────────────────────────────────────
-echo ""
-info "Setting up greetd (autologin after LUKS unlock)..."
-if [[ -f /etc/greetd/config.toml ]]; then
-    sudo cp /etc/greetd/config.toml /etc/greetd/config.toml.bak
+# bin/ commands → ~/.local/bin/ (ensures sumi-update etc. are in PATH).
+if [[ -d "$SCRIPT_DIR/bin" ]]; then
+    mkdir -p "$HOME/.local/bin"
+    for f in "$SCRIPT_DIR/bin/"*; do
+        chmod +x "$f"
+        link "$f" "$HOME/.local/bin/$(basename "$f")"
+    done
 fi
 
-# Generate config dynamically so [initial_session] uses the actual username.
-# [initial_session] runs once on cold boot — after LUKS unlock the user lands
-# straight in Hyprland without a second password prompt.
-# On logout greetd falls back to [default_session] (the tuigreet login prompt).
-sudo tee /etc/greetd/config.toml > /dev/null << GREETDCFG
-# ╔══════════════════════════════════════════════════════════════╗
-# ║  greetd — TUI Login Manager                                 ║
-# ╚══════════════════════════════════════════════════════════════╝
+# Wallust color seed files — copy once if missing (wallust overwrites later).
+[[ ! -f "$HOME/.config/waybar/colors.css" ]] && \
+    cp "$SCRIPT_DIR/wallust/templates/colors-waybar.css" \
+       "$HOME/.config/waybar/colors.css" 2>/dev/null || true
+[[ ! -f "$HOME/.config/fuzzel/colors.ini" ]] && \
+    cp "$SCRIPT_DIR/wallust/templates/colors-fuzzel.ini" \
+       "$HOME/.config/fuzzel/colors.ini" 2>/dev/null || true
 
+s_ok "All dotfiles linked"
+
+# ── 5. greetd ────────────────────────────────────────────────────
+s_section "Display Manager"
+
+[[ -f /etc/greetd/config.toml ]] && \
+    sudo cp /etc/greetd/config.toml /etc/greetd/config.toml.bak 2>/dev/null || true
+
+sudo tee /etc/greetd/config.toml > /dev/null << GREETDCFG
 [terminal]
 vt = 1
 
-# Cold-boot autologin: LUKS passphrase = authentication, no second prompt needed.
+# Cold-boot autologin: LUKS passphrase is authentication — no second prompt.
 [initial_session]
 command = "$HOME/.config/hypr/scripts/hyprland-wrapped.sh"
 user = "$USER"
 
-# Fallback after logout / lock: interactive tuigreet login.
+# After logout: interactive tuigreet login.
 [default_session]
-command = "tuigreet --time --time-format '%Y-%m-%d %H:%M' --greeting '╔══════════════════════════════════╗\n║     framework :: sumi login   ║\n╚══════════════════════════════════╝' --remember --remember-session --asterisks --cmd '$HOME/.config/hypr/scripts/hyprland-wrapped.sh' --theme 'border=darkgray;text=white;prompt=cyan;time=darkgray;action=darkgray;button=cyan;container=default;input=white'"
+command = "tuigreet --time --remember --remember-session --asterisks --cmd '$HOME/.config/hypr/scripts/hyprland-wrapped.sh'"
 user = "greeter"
 GREETDCFG
 
 sudo systemctl enable greetd.service 2>/dev/null || true
-ok "greetd configured — LUKS unlock → autologin as $USER"
+s_ok "greetd configured (LUKS unlock → autologin as $USER)"
 
-# ── 5. Setup Plymouth ───────────────────────────────────────
-info "Setting up Plymouth TUI boot theme..."
+# ── 6. Plymouth ──────────────────────────────────────────────────
+s_section "Plymouth"
+
 sudo mkdir -p /usr/share/plymouth/themes/hypr-tui
-sudo cp "$SCRIPT_DIR/plymouth/themes/hypr-tui/"* /usr/share/plymouth/themes/hypr-tui/
-sudo plymouth-set-default-theme hypr-tui 2>/dev/null || warn "Plymouth theme set failed — run manually"
+sudo cp "$SCRIPT_DIR/plymouth/themes/hypr-tui/"* \
+    /usr/share/plymouth/themes/hypr-tui/
+sudo plymouth-set-default-theme hypr-tui 2>/dev/null || \
+    s_warn "Plymouth theme set failed — run manually"
 
-# Add plymouth to mkinitcpio HOOKS
-if grep -q "^HOOKS=" /etc/mkinitcpio.conf; then
-    if ! grep -q "plymouth" /etc/mkinitcpio.conf; then
-        info "Adding plymouth hook to mkinitcpio..."
-        sudo sed -i 's/^HOOKS=(\(.*\)udev\(.*\))/HOOKS=(\1udev plymouth\2)/' /etc/mkinitcpio.conf
-        ok "Plymouth hook added"
-    else
-        ok "Plymouth hook already present"
-    fi
+if grep -q "^HOOKS=" /etc/mkinitcpio.conf && \
+   ! grep -q "plymouth" /etc/mkinitcpio.conf; then
+    sudo sed -i 's/^HOOKS=(\(.*\)udev\(.*\))/HOOKS=(\1udev plymouth\2)/' \
+        /etc/mkinitcpio.conf
+    s_ok "Plymouth hook added to mkinitcpio"
 fi
 
-# Add plymouth to kernel cmdline for systemd-boot
-LOADER_ENTRY=$(find /boot/loader/entries/ -name "*.conf" 2>/dev/null | head -1)
-if [[ -n "$LOADER_ENTRY" ]]; then
-    if ! grep -q "splash" "$LOADER_ENTRY" 2>/dev/null; then
-        info "Adding 'splash' to kernel cmdline..."
-        sudo sed -i 's/^options.*/& splash/' "$LOADER_ENTRY"
-        ok "Splash added to boot entry"
-    fi
+LOADER_ENTRY=$(find /boot/loader/entries/ -name "*.conf" 2>/dev/null | head -1 || true)
+if [[ -n "$LOADER_ENTRY" ]] && ! grep -q "splash" "$LOADER_ENTRY" 2>/dev/null; then
+    sudo sed -i 's/^options.*/& splash/' "$LOADER_ENTRY"
+    s_ok "splash added to kernel cmdline"
 fi
 
-# Regenerate initramfs
-info "Regenerating initramfs..."
-sudo mkinitcpio -P
-ok "Initramfs regenerated"
+gum spin --title "  Regenerating initramfs..." -- sudo mkinitcpio -P
+s_ok "Initramfs regenerated"
 
-# ── 6. Create wallpaper directory ────────────────────────────
-echo ""
-info "Setting up wallpaper directory..."
-mkdir -p "$HOME/Pictures/Wallpapers"
-mkdir -p "$HOME/Pictures/Screenshots"
-mkdir -p "$HOME/Videos/Recordings"
-mkdir -p "$HOME/.cache/sumi"
-ok "Created ~/Pictures/Wallpapers — drop your wallpapers here"
-ok "Created ~/Pictures/Screenshots & ~/Videos/Recordings"
+# ── 7. Directories ───────────────────────────────────────────────
+s_section "Directories"
 
-# ── 7. Enable services ──────────────────────────────────────
-info "Enabling services..."
-sudo systemctl enable bluetooth.service 2>/dev/null || true
-sudo systemctl enable NetworkManager.service 2>/dev/null || true
-ok "Core services enabled"
+mkdir -p \
+    "$HOME/Pictures/Wallpapers" \
+    "$HOME/Pictures/Screenshots" \
+    "$HOME/Videos/Recordings" \
+    "$HOME/.cache/sumi" \
+    "$HOME/.local/share/sumi" \
+    "$HOME/.local/bin"
+s_ok "~/Pictures/Wallpapers  ~/Pictures/Screenshots  ~/Videos/Recordings"
 
-# Enable user services (cliphist, wallust watcher)
-info "Enabling user services..."
-systemctl --user daemon-reload 2>/dev/null || true
-systemctl --user enable cliphist.service 2>/dev/null || true
-systemctl --user enable wallust-watcher.service 2>/dev/null || true
-systemctl --user enable lock-before-sleep.service 2>/dev/null || true
-systemctl --user enable sumi-cleanup.timer 2>/dev/null || true
-systemctl --user start sumi-cleanup.timer 2>/dev/null || true
-ok "User services enabled (cliphist, wallust-watcher, lock-before-sleep, cleanup-timer)"
+# ── 8. Services ──────────────────────────────────────────────────
+s_section "Services"
 
-# ── 7a. Framework 13 AMD specific services ──────────────────
-echo ""
-info "Setting up Framework 13 AMD hardware..."
+sudo systemctl enable \
+    bluetooth.service \
+    NetworkManager.service \
+    power-profiles-daemon.service \
+    fprintd.service \
+    fwupd.service \
+    2>/dev/null || true
 
-# Power Profiles Daemon (recommended over TLP for AMD 7040)
-sudo systemctl enable power-profiles-daemon.service 2>/dev/null || true
-# Make sure TLP is NOT running (conflicts with PPD on AMD)
+# TLP conflicts with power-profiles-daemon on AMD 7040.
 sudo systemctl disable tlp.service 2>/dev/null || true
-sudo systemctl mask tlp.service 2>/dev/null || true
-ok "power-profiles-daemon enabled (TLP disabled — AMD 7040 recommendation)"
+sudo systemctl mask    tlp.service 2>/dev/null || true
 
-# Fingerprint reader
-sudo systemctl enable fprintd.service 2>/dev/null || true
-ok "fprintd enabled"
+systemctl --user daemon-reload 2>/dev/null || true
+systemctl --user enable \
+    cliphist.service \
+    wallust-watcher.service \
+    lock-before-sleep.service \
+    sumi-cleanup.timer \
+    2>/dev/null || true
 
-# Firmware updates
-sudo systemctl enable fwupd.service 2>/dev/null || true
-ok "fwupd enabled (for Framework firmware updates)"
+s_ok "System and user services enabled"
 
-# Framework laptop kernel module
+# ── 9. Framework 13 AMD hardware ─────────────────────────────────
+s_section "Framework 13 Hardware"
+
 if pacman -Qi framework-laptop-kmod-dkms-git &>/dev/null; then
-    # Ensure cros_ec modules load at boot
-    echo -e "cros_ec\ncros_ec_lpcs" | sudo tee /etc/modules-load.d/framework.conf > /dev/null
-    ok "framework-laptop-kmod configured (battery charge limit, LEDs)"
-else
-    warn "framework-laptop-kmod not installed — install from AUR for charge limit control"
+    printf 'cros_ec\ncros_ec_lpcs\n' | \
+        sudo tee /etc/modules-load.d/framework.conf > /dev/null
+    s_ok "framework-laptop-kmod configured (charge limit, LEDs)"
 fi
 
-# Enroll fingerprint
-echo ""
-info "Fingerprint enrollment..."
-echo -e "${DIM}   Would you like to enroll a fingerprint now? [y/N]${RST}"
-read -r fp_answer
-if [[ "$fp_answer" =~ ^[Yy]$ ]]; then
-    fprintd-enroll || warn "Fingerprint enrollment failed — try again after reboot"
-fi
-
-# Set charge limit to 80% for battery longevity (persistent via tmpfiles)
 if [[ -f /sys/class/power_supply/BAT1/charge_control_end_threshold ]]; then
-    echo 80 | sudo tee /sys/class/power_supply/BAT1/charge_control_end_threshold > /dev/null
-    # Make it persistent across reboots via systemd-tmpfiles
-    echo 'w /sys/class/power_supply/BAT1/charge_control_end_threshold - - - - 80' \
-        | sudo tee /etc/tmpfiles.d/battery-charge-limit.conf > /dev/null
-    ok "Battery charge limit set to 80% (persistent via tmpfiles)"
+    echo 80 | sudo tee \
+        /sys/class/power_supply/BAT1/charge_control_end_threshold > /dev/null
+    printf 'w /sys/class/power_supply/BAT1/charge_control_end_threshold - - - - 80\n' | \
+        sudo tee /etc/tmpfiles.d/battery-charge-limit.conf > /dev/null
+    s_ok "Battery charge limit → 80%"
 fi
 
-# AMD-specific kernel parameters for better s2idle
-LOADER_ENTRY_FW=$(find /boot/loader/entries/ -name "*.conf" 2>/dev/null | head -1)
-if [[ -n "$LOADER_ENTRY_FW" ]]; then
-    if ! grep -q "amd_pstate=active" "$LOADER_ENTRY_FW" 2>/dev/null; then
-        info "Adding AMD power tuning to kernel cmdline..."
-        sudo sed -i 's/^options.*/& amd_pstate=active rtc_cmos.use_acpi_alarm=1/' "$LOADER_ENTRY_FW"
-        ok "AMD pstate=active and RTC alarm fix added"
-    fi
+LOADER_FW=$(find /boot/loader/entries/ -name "*.conf" 2>/dev/null | head -1 || true)
+if [[ -n "$LOADER_FW" ]] && ! grep -q "amd_pstate=active" "$LOADER_FW" 2>/dev/null; then
+    sudo sed -i 's/^options.*/& amd_pstate=active rtc_cmos.use_acpi_alarm=1/' "$LOADER_FW"
+    s_ok "AMD pstate=active + RTC alarm fix added"
 fi
 
-# ── 8. Setup Zsh + Shell Environment ─────────────────────────
-echo ""
-info "Setting up Zsh shell environment..."
+# ── 10. Shell ────────────────────────────────────────────────────
+s_section "Shell"
 
-# Change default shell to zsh
-if command -v zsh &>/dev/null; then
-    if [[ "$SHELL" != "$(command -v zsh)" ]]; then
-        chsh -s "$(command -v zsh)"
-        ok "Default shell changed to zsh"
-    else
-        ok "Shell already set to zsh"
-    fi
+if command -v zsh &>/dev/null && [[ "$SHELL" != "$(command -v zsh)" ]]; then
+    chsh -s "$(command -v zsh)"
+    s_ok "Default shell → zsh"
+else
+    s_ok "Shell already zsh"
 fi
 
-# Deploy .zshrc
-deploy "$SCRIPT_DIR/zsh/.zshrc" "$HOME/.zshrc"
-ok "Zsh config deployed with TUI aliases"
-
-# Deploy .editorconfig (project-level defaults for editors)
-if [[ -f "$SCRIPT_DIR/.editorconfig" ]]; then
-    deploy "$SCRIPT_DIR/.editorconfig" "$HOME/.editorconfig"
-fi
-
-# ── 9. Disable other display managers ────────────────────────
-info "Checking for conflicting display managers..."
+# ── 11. Disable conflicting display managers ─────────────────────
 for dm in gdm sddm lightdm ly; do
     if systemctl is-enabled "$dm.service" 2>/dev/null | grep -q "enabled"; then
         sudo systemctl disable "$dm.service" 2>/dev/null
-        warn "Disabled conflicting DM: $dm"
+        s_warn "Disabled conflicting DM: $dm"
     fi
 done
 
-# ── Done ─────────────────────────────────────────────────────
-echo ""
-echo -e "${DIM}╔══════════════════════════════════════╗${RST}"
-echo -e "${GRN}║   sumi :: framework 13 ready       ║${RST}"
-echo -e "${DIM}╠══════════════════════════════════════╣${RST}"
-echo -e "${DIM}║${RST}                                      ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  1. Drop wallpapers in:              ${DIM}║${RST}"
-echo -e "${DIM}║${RST}     ~/Pictures/Wallpapers/           ${DIM}║${RST}"
-echo -e "${DIM}║${RST}                                      ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  2. Reboot for greetd + plymouth     ${DIM}║${RST}"
-echo -e "${DIM}║${RST}                                      ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  3. SUPER+X for TUI control center   ${DIM}║${RST}"
-echo -e "${DIM}║${RST}                                      ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  TUI apps:                           ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  SUPER+E files  SUPER+I wifi         ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  SUPER+B blue   SUPER+A audio        ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  SUPER+G git    SUPER+T monitor      ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  SUPER+M cava   SUPER+X control      ${DIM}║${RST}"
-echo -e "${DIM}║${RST}                                      ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  Pickers & tools:                    ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  S+SH+V clip   S+Tab   windows      ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  S+.    emoji  S+SH+N  notifs       ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  S+SH+S shot   S+AL+S  shot-pick    ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  S+AL+R rec    S+SH+E  power        ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  S+SH+W wall   S+SH+T  theme        ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  S+=    calc   S+/     cheatsheet   ${DIM}║${RST}"
-echo -e "${DIM}║${RST}                                      ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  Submaps (modal):                    ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  S+CT+R → resize (hjkl, Esc exit)   ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  S+W    → group  (g/h/l/n/p/o)      ${DIM}║${RST}"
-echo -e "${DIM}║${RST}                                      ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  Modes:                              ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  F5 gaming  F6 focus  F7 monitor     ${DIM}║${RST}"
-echo -e "${DIM}║${RST}                                      ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  Scratchpads: F1 term  F2 music      ${DIM}║${RST}"
-echo -e "${DIM}║${RST}               F3 monitor F4 devterm  ${DIM}║${RST}"
-echo -e "${DIM}║${RST}                                      ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  Dev tools:                          ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  S+SH+P projects S+SH+G worktree    ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  S+AL+Ret tmux   nvim has LSP+cmp   ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  tmux: C-a g=git f=files t=btop     ${DIM}║${RST}"
-echo -e "${DIM}║${RST}                                      ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  Framework 13 AMD:                   ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  • Fingerprint on lockscreen         ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  • pwr: in bar cycles profile        ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  • Charge capped at 80%              ${DIM}║${RST}"
-echo -e "${DIM}║${RST}                                      ${DIM}║${RST}"
-echo -e "${DIM}╚══════════════════════════════════════╝${RST}"
-echo ""
-echo -e "${CYN}:: Reboot now? [y/N]${RST}"
-read -r answer
-if [[ "$answer" =~ ^[Yy]$ ]]; then
-    sudo reboot
+# ── 12. Migrations ───────────────────────────────────────────────
+s_section "Migrations"
+
+MIGRATIONS_DIR="$SCRIPT_DIR/migrations"
+APPLIED_FILE="$HOME/.local/share/sumi/applied-migrations"
+mkdir -p "$HOME/.local/share/sumi"
+touch "$APPLIED_FILE"
+
+ran=0
+if [[ -d "$MIGRATIONS_DIR" ]]; then
+    for migration in "$MIGRATIONS_DIR"/[0-9]*.sh; do
+        [[ -f "$migration" ]] || continue
+        num=$(basename "$migration" | grep -oE '^[0-9]+')
+        grep -qxF "$num" "$APPLIED_FILE" && continue
+        s_step "$(basename "$migration")..."
+        if bash "$migration"; then
+            echo "$num" >> "$APPLIED_FILE"
+            s_ok "Applied: $(basename "$migration")"
+            ((ran++)) || true
+        else
+            s_fail "Migration failed: $(basename "$migration")"
+            exit 1
+        fi
+    done
 fi
+[[ $ran -eq 0 ]] && s_ok "No pending migrations" || s_ok "$ran migration(s) applied"
+
+# ── 13. Fingerprint ──────────────────────────────────────────────
+echo ""
+if gum confirm "  Enroll fingerprint now?" --default=false; then
+    fprintd-enroll || s_warn "Fingerprint enrollment failed — retry after reboot"
+fi
+
+# ── Done ─────────────────────────────────────────────────────────
+echo ""
+gum style \
+    --border rounded --border-foreground '#a6e3a1' \
+    --margin "1 2" --padding "1 4" \
+    "$(gum style --foreground '#a6e3a1' --bold '  ✓  sumi installed')" \
+    "" \
+    "  $(gum style --foreground '#cba6f7' '1.')  Drop wallpapers in $(gum style --foreground '#f38ba8' '~/Pictures/Wallpapers/')" \
+    "  $(gum style --foreground '#cba6f7' '2.')  Reboot → LUKS unlock → autologin → Hyprland" \
+    "  $(gum style --foreground '#cba6f7' '3.')  SUPER+X  control center    SUPER+/  keybinds" \
+    "" \
+    "  To update later: $(gum style --foreground '#89b4fa' 'sumi-update')"
+echo ""
+gum confirm "  Reboot now?" && sudo reboot || true

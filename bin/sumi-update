@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# sumi-update — pull latest changes and re-run the installer.
+# Symlinks mean configs update instantly on git pull;
+# install.sh then applies any pending migrations.
+set -euo pipefail
+
+SUMI_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+cd "$SUMI_DIR"
+echo "Pulling latest sumi..."
+git pull --rebase --autostash
+
+exec bash "$SUMI_DIR/install.sh"
