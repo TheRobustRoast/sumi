@@ -376,7 +376,7 @@ if [[ $INSTALL_EXIT -eq 0 ]]; then
             grim slurp wl-clipboard cliphist polkit-gnome \
             cava brightnessctl playerctl pulsemixer wtype \
             bluez bluez-utils \
-            yazi ffmpegthumbnailer p7zip unar poppler \
+            yazi ffmpegthumbnailer p7zip unarchiver poppler \
             fd ripgrep fzf zoxide \
             imv mpv zathura zathura-pdf-mupdf \
             btop neovim ncdu \
@@ -390,7 +390,7 @@ if [[ $INSTALL_EXIT -eq 0 ]]; then
             qt5-wayland qt6-wayland \
             pipewire pipewire-alsa pipewire-audio pipewire-jack pipewire-pulse wireplumber \
             power-profiles-daemon fprintd fwupd libfprint iio-sensor-proxy \
-            mesa vulkan-radeon libva-mesa-driver mesa-vdpau \
+            mesa vulkan-radeon libva-mesa-driver \
             acpi_call acpid wf-recorder inotify-tools xdg-utils \
             gum
     } >> "$INSTALL_LOG" 2>&1 && s_ok "Packages installed" || { s_fail "Package installation failed"; INSTALL_EXIT=1; }
