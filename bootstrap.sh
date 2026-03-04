@@ -384,6 +384,10 @@ wipefs -af "$NVME" 2>/dev/null || true
 partprobe "$NVME" 2>/dev/null || true
 udevadm settle --timeout 10 2>/dev/null || true
 
+# Clear the install log so the error page only shows the current run
+mkdir -p /var/log/archinstall
+: > /var/log/archinstall/install.log
+
 # Capture exit code without letting set -e kill the script
 # (trap cleanup_secrets EXIT handles temp file deletion)
 INSTALL_EXIT=0
@@ -414,10 +418,33 @@ try:
 except Exception as e:
     log = f"Log file not available ({e})"
 
-# Extract just the error section: from the last ERROR line to end
+# Clean view: collapse each Python traceback to just the exception message.
+# Full traceback is still available in the "Full Log" tab.
+import re as _re
 lines = log.splitlines()
-last_err = max((i for i, l in enumerate(lines) if '- ERROR -' in l), default=0)
-error_section = '\n'.join(lines[max(0, last_err - 1):])
+cleaned = []
+i = 0
+while i < len(lines):
+    line = lines[i]
+    if '- ERROR -' in line:
+        # Strip "Traceback (most recent call last):" from the header line
+        cleaned.append(_re.sub(r'\s*Traceback \(most recent call last\):\s*$', '', line))
+        # Collect the traceback block (everything until the next timestamp)
+        j, block = i + 1, []
+        while j < len(lines) and not lines[j].startswith('['):
+            block.append(lines[j])
+            j += 1
+        # Find the last meaningful line = the actual exception class: message
+        for bl in reversed(block):
+            s = bl.strip()
+            if s and not s.startswith('File ') and not all(c in ' ~^' for c in s) and s != '...':
+                cleaned.append('  ' + s)
+                break
+        i = j
+    else:
+        cleaned.append(line)
+        i += 1
+error_section = '\n'.join(cleaned)
 
 page = f"""<!DOCTYPE html>
 <html lang="en">
