@@ -281,8 +281,11 @@ LOCAL_IP=$(ip -4 addr show scope global \
 [[ -z "$LOCAL_IP" ]] && LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
 [[ -z "$LOCAL_IP" ]] && LOCAL_IP="this-machine"
 
-# Reinstall archinstall to restore any files broken by previous runs
+# Delete luks.py before upgrading so pacman is forced to restore it —
+# a previous bootstrap run may have left a broken patched version behind,
+# and pacman -Sy only reinstalls when a newer package version is available.
 info "Updating archinstall..."
+rm -f /usr/lib/python3*/site-packages/archinstall/lib/luks.py 2>/dev/null || true
 pacman -Sy --noconfirm archinstall 2>/dev/null || true
 
 # Wrap cryptsetup to handle exit 5 (CRYPT_BUSY / "device already open").
