@@ -70,6 +70,18 @@ for cmd in git sudo pacman; do
     command -v "$cmd" &>/dev/null && s_ok "$cmd found" || { s_fail "$cmd not found"; exit 1; }
 done
 
+s_step "Refreshing keyring..."
+gum spin --title "  Updating archlinux-keyring..." -- \
+    sudo pacman -Sy --noconfirm archlinux-keyring
+gum spin --title "  Populating keys..." -- \
+    sudo pacman-key --populate archlinux
+s_ok "Keyring up to date"
+
+s_step "Installing keyring hook..."
+sudo mkdir -p /etc/pacman.d/hooks
+sudo install -m 644 "$SCRIPT_DIR/pacman/hooks/keyring.hook" /etc/pacman.d/hooks/keyring.hook
+s_ok "Keyring hook installed"
+
 # ── 1. AUR helper (yay) ──────────────────────────────────────────
 s_section "AUR Helper"
 
