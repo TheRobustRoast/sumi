@@ -316,12 +316,12 @@ echo ""
 pacman -Sy --noconfirm archinstall 2>/dev/null || true
 
 # ── Pre-flight: clear ALL stale disk state from previous attempts ──────────
-# archinstall 3.x: if a LUKS mapper from a prior run is still open, its DM
-# device holds a kernel reference to the partition by block device number.
-# When archinstall creates a new partition (same major:minor) and calls
-# wipefs immediately, it fails with "Device or resource busy" because the
-# old DM reference is still live.
-# Fix: force-remove all non-ISO DM devices, wipe, then udevadm settle.
+# archinstall 3.x: /dev/mapper/root from a prior run causes cryptsetup
+# to fail with exit 5 ("device already exists") when it tries to open the
+# freshly-formatted LUKS partition. Even after umount, the kernel's btrfs
+# subsystem holds a reference that blocks dmsetup remove --force.
+# Fix: drop the page/dentry/inode cache to release kernel FS references,
+# then explicitly close the root mapper before the general DM cleanup.
 
 # 1. Unmount everything under /mnt
 if mountpoint -q /mnt 2>/dev/null; then
@@ -329,15 +329,23 @@ if mountpoint -q /mnt 2>/dev/null; then
     umount -R /mnt 2>/dev/null || true
 fi
 
-# 2. Force-remove all non-ISO device mapper devices
-# dmsetup --force bypasses "busy"; ventoy/sda are the live ISO and stay
-for name in $(dmsetup ls 2>/dev/null | awk '{print $1}'); do
+# 2. Drop caches so the kernel releases btrfs inode/dentry refs on the mapper
+sync
+echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
+sleep 1
+
+# 3. Close all non-ISO device mapper devices
+# Try cryptsetup first (graceful), then dmsetup --force (nuclear)
+# "root" is archinstall's LUKS mapper name — handle it explicitly first
+for name in root $(dmsetup ls 2>/dev/null | awk '{print $1}'); do
     [[ "$name" == "ventoy" ]] && continue
     [[ "$name" =~ ^sda ]] && continue
-    dmsetup remove --force "$name" 2>/dev/null || true
+    [[ ! -b "/dev/mapper/$name" ]] && continue
+    cryptsetup close "$name" 2>/dev/null || true
+    [[ -b "/dev/mapper/$name" ]] && dmsetup remove --force "$name" 2>/dev/null || true
 done
 
-# 3. Wipe all FS/partition-table signatures so archinstall finds a blank disk
+# 4. Wipe all FS/partition-table signatures so archinstall finds a blank disk
 wipefs -af "$NVME" 2>/dev/null || true
 partprobe "$NVME" 2>/dev/null || true
 udevadm settle --timeout 10 2>/dev/null || true
