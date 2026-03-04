@@ -361,6 +361,12 @@ if [[ $INSTALL_EXIT -eq 0 ]]; then
     } >> "$INSTALL_LOG" 2>&1 && s_ok "Filesystems mounted" || { s_fail "Mount failed"; INSTALL_EXIT=1; }
 fi
 
+# ── Pre-seed /etc so pacstrap's mkinitcpio hook doesn't warn ────
+if [[ $INSTALL_EXIT -eq 0 ]]; then
+    mkdir -p /mnt/etc
+    echo "KEYMAP=us" > /mnt/etc/vconsole.conf
+fi
+
 # ── Packages ────────────────────────────────────────────────────
 if [[ $INSTALL_EXIT -eq 0 ]]; then
     s_step "Installing packages (5-15 min, downloading from internet)..."
@@ -405,15 +411,13 @@ fi
 # ── Chroot configuration ─────────────────────────────────────────
 if [[ $INSTALL_EXIT -eq 0 ]]; then
     s_step "Configuring system in chroot..."
-    mkdir -p /mnt/tmp
-    CHROOT_SCRIPT=/mnt/tmp/sumi-chroot-setup.sh
-
-    # Write the setup script — outer ${VAR} expands here (not sensitive),
-    # password is passed via SUMI_PASS env var (never written to disk).
-    cat > "$CHROOT_SCRIPT" << CHROOT_EOF
-#!/bin/bash
+    {
+        echo ""; echo "==> chroot setup"
+        # Pipe the setup script directly to bash -s — no temp file on disk.
+        # Outer vars (TIMEZONE, HOSTNAME, USERNAME, LUKS_UUID) expand here;
+        # PASSWORD travels only via SUMI_PASS env var.
+        SUMI_PASS="$PASSWORD" arch-chroot /mnt bash -s << CHROOT_EOF
 set -euo pipefail
-
 TIMEZONE="${TIMEZONE}"
 HOSTNAME="${HOSTNAME}"
 USERNAME="${USERNAME}"
@@ -484,13 +488,7 @@ ZRAM
 
 echo "==> done"
 CHROOT_EOF
-
-    chmod +x "$CHROOT_SCRIPT"
-    {
-        echo ""; echo "==> chroot setup"
-        SUMI_PASS="$PASSWORD" arch-chroot /mnt /tmp/sumi-chroot-setup.sh
     } >> "$INSTALL_LOG" 2>&1 && s_ok "System configured" || { s_fail "Chroot configuration failed"; INSTALL_EXIT=1; }
-    rm -f "$CHROOT_SCRIPT"
 fi
 
 set -e
