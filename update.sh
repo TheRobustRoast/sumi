@@ -38,6 +38,14 @@ git -C "$SCRIPT_DIR" pull --ff-only || {
 ok "Up to date"
 echo ""
 
+# ── Re-link configs (fixes broken symlinks after first install) ──
+info "Refreshing symlinks..."
+ln -sf "$SCRIPT_DIR/foot/foot.ini" "$HOME/.config/foot/foot.ini"
+[[ ! -f "$HOME/.config/foot/colors.ini" ]] && \
+    cp "$SCRIPT_DIR/foot/colors.ini" "$HOME/.config/foot/colors.ini"
+ok "Symlinks up to date"
+echo ""
+
 # ── Reload services ──────────────────────────────────────────
 systemctl --user daemon-reload 2>/dev/null || true
 
