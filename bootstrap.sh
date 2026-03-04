@@ -316,12 +316,12 @@ echo ""
 pacman -Sy --noconfirm archinstall 2>/dev/null || true
 
 # ── Pre-flight: clear ALL stale disk state from previous attempts ──────────
-# archinstall 3.x bug: umount_all_existing() passes btrfs subvolume paths
-# (e.g. /mnt/@var_log) to lsblk, which only accepts block devices.
-# Root cause: LUKS container left open → lsblk reports btrfs subvol paths
-# as mountpoints → archinstall calls lsblk on them → DiskError.
-# Fix: unmount, close LUKS, then wipe signatures so archinstall finds a
-# completely blank disk and has nothing to try to unmount.
+# archinstall 3.x: if a LUKS mapper from a prior run is still open, its DM
+# device holds a kernel reference to the partition by block device number.
+# When archinstall creates a new partition (same major:minor) and calls
+# wipefs immediately, it fails with "Device or resource busy" because the
+# old DM reference is still live.
+# Fix: force-remove all non-ISO DM devices, wipe, then udevadm settle.
 
 # 1. Unmount everything under /mnt
 if mountpoint -q /mnt 2>/dev/null; then
@@ -329,19 +329,18 @@ if mountpoint -q /mnt 2>/dev/null; then
     umount -R /mnt 2>/dev/null || true
 fi
 
-# 2. Close any open LUKS containers on the target disk
-for dm in /dev/mapper/*; do
-    [[ "$dm" == "/dev/mapper/control" ]] && continue
-    backing=$(cryptsetup status "$dm" 2>/dev/null | awk '/device:/ {print $2}') || true
-    if [[ -n "$backing" && "$backing" == "${NVME}"* ]]; then
-        info "Closing LUKS mapper: $(basename "$dm")"
-        cryptsetup close "$dm" 2>/dev/null || true
-    fi
+# 2. Force-remove all non-ISO device mapper devices
+# dmsetup --force bypasses "busy"; ventoy/sda are the live ISO and stay
+for name in $(dmsetup ls 2>/dev/null | awk '{print $1}'); do
+    [[ "$name" == "ventoy" ]] && continue
+    [[ "$name" =~ ^sda ]] && continue
+    dmsetup remove --force "$name" 2>/dev/null || true
 done
 
-# 3. Wipe all FS signatures and partition table → archinstall sees blank disk
+# 3. Wipe all FS/partition-table signatures so archinstall finds a blank disk
 wipefs -af "$NVME" 2>/dev/null || true
 partprobe "$NVME" 2>/dev/null || true
+udevadm settle --timeout 10 2>/dev/null || true
 
 # Capture exit code without letting set -e kill the script
 # (trap cleanup_secrets EXIT handles temp file deletion)
