@@ -37,12 +37,7 @@
                         "type": "primary"
                     },
                     {
-                        "btrfs": [
-                            {"mountpoint": "/", "name": "@"},
-                            {"mountpoint": "/home", "name": "@home"},
-                            {"mountpoint": "/.snapshots", "name": "@snapshots"},
-                            {"mountpoint": "/var/log", "name": "@var_log"}
-                        ],
+                        "btrfs": [],
                         "dev_path": null,
                         "flags": [],
                         "fs_type": "btrfs",
