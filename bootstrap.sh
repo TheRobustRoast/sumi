@@ -3,9 +3,9 @@
 # ║  sumi :: bootstrap                                          ║
 # ║                                                              ║
 # ║  Run this from the Arch Linux live ISO.                      ║
-# ║  It connects to WiFi, collects your settings, patches the   ║
-# ║  archinstall configs, runs archinstall, then stages the      ║
-# ║  post-install script to run on first boot.                   ║
+# ║  Partitions, encrypts, installs, and configures Arch Linux   ║
+# ║  with LUKS2, btrfs, systemd-boot, then stages the rice       ║
+# ║  installer for first boot.                                   ║
 # ║                                                              ║
 # ║  Usage:                                                      ║
 # ║    Boot Arch ISO → connect to internet (or let this help) →  ║
@@ -16,385 +16,463 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONF="$SCRIPT_DIR/archinstall/user_configuration.json"
-CREDS="$SCRIPT_DIR/archinstall/user_credentials.json"
+INSTALL_LOG="/tmp/sumi-install.log"
 
-# Colors (used for non-dialog terminal output)
-RED='\033[0;31m'
-GRN='\033[0;32m'
-CYN='\033[0;36m'
-YLW='\033[0;33m'
-BLD='\033[1m'
-RST='\033[0m'
+# ── Catppuccin Mocha palette for gum ────────────────────────────
+export GUM_INPUT_CURSOR_FOREGROUND="#f38ba8"
+export GUM_INPUT_PROMPT_FOREGROUND="#cba6f7"
+export GUM_INPUT_HEADER_FOREGROUND="#7f849c"
+export GUM_INPUT_PLACEHOLDER_FOREGROUND="#45475a"
+export GUM_CONFIRM_PROMPT_FOREGROUND="#cba6f7"
+export GUM_CONFIRM_SELECTED_BACKGROUND="#a6e3a1"
+export GUM_CONFIRM_SELECTED_FOREGROUND="#1e1e2e"
+export GUM_CONFIRM_UNSELECTED_BACKGROUND="#313244"
+export GUM_CONFIRM_UNSELECTED_FOREGROUND="#cdd6f4"
+export GUM_CHOOSE_CURSOR_FOREGROUND="#f38ba8"
+export GUM_CHOOSE_HEADER_FOREGROUND="#cba6f7"
+export GUM_CHOOSE_SELECTED_FOREGROUND="#a6e3a1"
+export GUM_CHOOSE_CURSOR_PREFIX="▶ "
+export GUM_CHOOSE_SELECTED_PREFIX="● "
+export GUM_CHOOSE_UNSELECTED_PREFIX="  "
+export GUM_SPIN_SPINNER="dot"
+export GUM_SPIN_SPINNER_FOREGROUND="#cba6f7"
+export GUM_SPIN_TITLE_FOREGROUND="#cdd6f4"
 
-BT="sumi :: arch linux bootstrap"
+# Fallback ANSI (used before gum is available)
+CYN='\033[0;36m'; RST='\033[0m'
 
-info()  { echo -e "${CYN}:: ${RST}$1"; }
-ok()    { echo -e "${GRN}   ✓${RST} $1"; }
-warn()  { echo -e "${YLW}   !${RST} $1"; }
-err()   { echo -e "${RED}   ✗${RST} $1"; }
-
-# ── 0. Sanity checks ───────────────────────────────────────────
-if [[ ! -f "$CONF" ]]; then
-    err "Cannot find: $CONF"
-    err "Make sure you're running this from the sumi repo root."
-    err "Expected: cd /path/to/sumi && ./bootstrap.sh"
-    exit 1
-fi
-
-if [[ ! -f "$CREDS" ]]; then
-    warn "user_credentials.json not found — generating template..."
-    mkdir -p "$(dirname "$CREDS")"
-    cat > "$CREDS" << 'CREDSTPL'
-{
-    "!root-password": "!CHANGE_ME!",
-    "!users": [
-        {
-            "!password": "!CHANGE_ME!",
-            "sudo": true,
-            "username": "user"
-        }
-    ],
-    "encryption_password": "!CHANGE_ME!"
+# ── Helpers ──────────────────────────────────────────────────────
+s_step()    { gum style --foreground '#89b4fa' "  · $1"; }
+s_ok()      { gum style --foreground '#a6e3a1' "  ✓  $1"; }
+s_fail()    { gum style --foreground '#f38ba8' "  ✗  $1"; }
+s_warn()    { gum style --foreground '#f9e2af' "  !  $1"; }
+s_section() {
+    echo ""
+    gum style --foreground '#cba6f7' --bold "  ── $1"
+    echo ""
 }
-CREDSTPL
-    ok "Generated $CREDS"
-fi
 
-# ── Install dialog if missing ──────────────────────────────────
-if ! command -v dialog &>/dev/null; then
-    info "Installing dialog..."
-    pacman -Sy --noconfirm dialog &>/dev/null
-fi
-
-# ── Welcome ────────────────────────────────────────────────────
-dialog --backtitle "$BT" \
-    --title " sumi " \
-    --msgbox "\n  Framework 13 AMD  ·  Hyprland  ·  TUI\n\n  This script installs Arch Linux with:\n    · Full disk encryption (LUKS2)\n    · btrfs with subvolumes\n    · Hyprland + sumi rice (post-boot)\n\n  Press OK to begin." 13 52
-
-# ── Non-ISO warning ────────────────────────────────────────────
-if [[ ! -d /run/archiso ]]; then
-    dialog --backtitle "$BT" \
-        --title " Warning " \
-        --defaultno \
-        --yesno "\n  This doesn't look like the Arch Linux live ISO.\n\n  This script is designed to run from the installer.\n\n  Continue anyway?" 11 52 || exit 0
-fi
-
-# ── 1. Network ─────────────────────────────────────────────────
-dialog --backtitle "$BT" \
-    --title " Network " \
-    --infobox "\n  Checking internet connectivity..." 5 42
-
-if ! ping -c 1 -W 3 archlinux.org &>/dev/null; then
-    dialog --backtitle "$BT" \
-        --title " No Internet " \
-        --msgbox "\n  No internet connection detected.\n\n  Press OK to open iwctl and connect to WiFi.\n\n  Commands:\n    station wlan0 scan\n    station wlan0 get-networks\n    station wlan0 connect <SSID>\n    exit" 15 52
-
-    clear
-    iwctl || true
-
-    sleep 2
-    if ! ping -c 1 -W 3 archlinux.org &>/dev/null; then
-        dialog --backtitle "$BT" \
-            --title " Error " \
-            --msgbox "\n  Still no internet connection.\n\n  Please connect manually and re-run this script." 9 52
-        exit 1
+# Run a command, log output, show ✓ / ✗ — sets INSTALL_EXIT on failure
+run_step() {
+    local title="$1"; shift
+    s_step "$title..."
+    if "$@" >> "$INSTALL_LOG" 2>&1; then
+        s_ok "$title"
+    else
+        s_fail "$title"
+        INSTALL_EXIT=1
     fi
+}
+
+# ── 0. Bootstrap gum ─────────────────────────────────────────────
+echo -e "${CYN}:: ${RST}Initializing..."
+if ! command -v gum &>/dev/null; then
+    echo -e "${CYN}:: ${RST}Installing gum (TUI toolkit)..."
+    pacman -Sy --noconfirm gum &>/dev/null
 fi
 
-# ── 2. Detect disk ─────────────────────────────────────────────
-dialog --backtitle "$BT" \
-    --title " Disk Detection " \
-    --infobox "\n  Scanning for disks..." 5 38
+# ── Welcome ──────────────────────────────────────────────────────
+clear
+gum style \
+    --border rounded \
+    --border-foreground '#313244' \
+    --margin "1 2" \
+    --padding "1 4" \
+    "$(gum style --foreground '#f38ba8' --bold 'sumi') $(gum style --foreground '#45475a' '::') $(gum style --foreground '#cdd6f4' 'arch linux bootstrap')" \
+    "" \
+    "$(gum style --foreground '#6c7086' 'Framework 13 AMD  ·  LUKS2  ·  btrfs  ·  Hyprland')" \
+    "$(gum style --foreground '#313244' '────────────────────────────────────────────────')" \
+    "$(gum style --foreground '#585b70' 'Partitions · Encrypts · Installs · Stages the rice')"
+echo ""
+gum confirm "  Begin installation?" || exit 0
 
-NVME_DEFAULT=$(lsblk -dno NAME,TYPE | grep disk | grep nvme | head -1 | awk '{print "/dev/"$1}') || true
+# ── Non-ISO warning ──────────────────────────────────────────────
+if [[ ! -d /run/archiso ]]; then
+    echo ""
+    s_warn "This doesn't look like the Arch Linux live ISO."
+    gum confirm "  Continue anyway?" --default=false || exit 0
+fi
 
-MENU_ITEMS=()
-while read -r name size; do
-    MENU_ITEMS+=("/dev/$name" "$size")
-done < <(lsblk -dno NAME,SIZE,TYPE | grep disk | awk '{print $1, $2}')
+# ── 1. Network ───────────────────────────────────────────────────
+s_section "Network"
 
-if [[ ${#MENU_ITEMS[@]} -eq 0 ]]; then
-    dialog --backtitle "$BT" --title " Error " \
-        --msgbox "\n  No disks detected.\n\n  Please check your hardware and try again." 9 48
+if ! gum spin --title "  Checking connectivity..." -- \
+    ping -c 1 -W 3 archlinux.org 2>/dev/null; then
+    s_warn "No internet connection detected."
+    echo ""
+    gum style \
+        --border rounded --border-foreground '#f9e2af' --padding "0 2" \
+        "  station wlan0 scan" \
+        "  station wlan0 get-networks" \
+        "  station wlan0 connect <SSID>" \
+        "  exit"
+    echo ""
+    gum confirm "  Open iwctl now?" && { clear; iwctl || true; }
+    sleep 2
+    gum spin --title "  Rechecking..." -- ping -c 1 -W 3 archlinux.org || {
+        s_fail "No internet. Connect manually and re-run."
+        exit 1
+    }
+fi
+s_ok "Internet connected"
+
+# ── 2. Disk selection ────────────────────────────────────────────
+s_section "Disk"
+
+gum spin --title "  Scanning disks..." -- sleep 0.5 2>/dev/null || true
+
+NVME_DEFAULT=$(lsblk -dno NAME,TYPE | grep disk | grep nvme | head -1 \
+    | awk '{print "/dev/"$1}') || true
+
+mapfile -t DISK_LIST < <(lsblk -dno NAME,SIZE,TYPE | grep disk \
+    | awk '{printf "/dev/%-14s %s\n", $1, $2}')
+
+if [[ ${#DISK_LIST[@]} -eq 0 ]]; then
+    s_fail "No disks detected."
     exit 1
 fi
 
-NVME=$(dialog --backtitle "$BT" \
-    --title " Select Installation Disk " \
-    --stdout \
-    --default-item "${NVME_DEFAULT:-${MENU_ITEMS[0]}}" \
-    --menu "\n  Select the disk to install Arch Linux on.\n\n  WARNING: The selected disk will be WIPED." 14 56 6 \
-    "${MENU_ITEMS[@]}") || { info "Aborted."; exit 0; }
+DISK_CHOICE=$(printf '%s\n' "${DISK_LIST[@]}" \
+    | gum choose --header "  Select installation disk") || { s_step "Aborted."; exit 0; }
+NVME=$(echo "$DISK_CHOICE" | awk '{print $1}')
 
 if [[ ! -b "$NVME" ]]; then
-    dialog --backtitle "$BT" --title " Error " \
-        --msgbox "\n  $NVME is not a valid block device." 7 48
+    s_fail "$NVME is not a valid block device."
     exit 1
 fi
 
-# Calculate root partition size from actual disk size.
-# EFI ends at 1025 MiB; leave 1 MiB at the end for the backup GPT header.
-DISK_SIZE_MIB=$(lsblk -bdno SIZE "$NVME" | awk '{print int($1/1024/1024)}')
-ROOT_SIZE_MIB=$((DISK_SIZE_MIB - 1025 - 1))
-
-# Detect GPU for the correct archinstall gfx_driver value
-if lspci 2>/dev/null | grep -qi "nvidia"; then
-    GFX_DRIVER="Nvidia (open-source)"
-elif lspci 2>/dev/null | grep -qiE "intel.*(graphics|vga|display)"; then
-    GFX_DRIVER="Intel (open-source)"
-else
-    GFX_DRIVER="AMD / ATI (open-source)"   # covers AMD, ATI, and unknown
+# Partition suffix: nvme uses p1/p2, sata uses 1/2
+if [[ "$NVME" =~ nvme ]]; then EFI_PART="${NVME}p1"; ROOT_PART="${NVME}p2"
+else                            EFI_PART="${NVME}1";  ROOT_PART="${NVME}2"
 fi
 
-# Wipe confirmation
 DISK_SIZE_HUMAN=$(lsblk -dno SIZE "$NVME")
-dialog --backtitle "$BT" \
-    --title " ⚠  DESTRUCTIVE ACTION " \
-    --defaultno \
-    --yesno "\n  $NVME  ($DISK_SIZE_HUMAN)\n\n  ALL DATA ON THIS DISK WILL BE PERMANENTLY ERASED.\n  This cannot be undone.\n\n  Are you absolutely sure?" 12 56 || { info "Aborted."; exit 0; }
+s_ok "Selected: $NVME  ($DISK_SIZE_HUMAN)"
 
-# ── 3. Collect user settings ───────────────────────────────────
+echo ""
+gum style \
+    --border rounded --border-foreground '#f38ba8' --padding "0 2" \
+    "$(gum style --foreground '#f38ba8' "  ⚠  ALL DATA ON $NVME ($DISK_SIZE_HUMAN) WILL BE ERASED")"
+echo ""
+gum confirm "  Confirm wipe?" \
+    --prompt.foreground '#f38ba8' \
+    --selected.background '#f38ba8' --selected.foreground '#1e1e2e' \
+    --default=false || { s_step "Aborted."; exit 0; }
 
-# Username
-USERNAME=$(dialog --backtitle "$BT" \
-    --title " Username " \
-    --stdout \
-    --inputbox "\n  Enter your username:" 8 44 "user") || { info "Aborted."; exit 0; }
+# ── 3. User configuration ────────────────────────────────────────
+s_section "User Configuration"
+
+USERNAME=$(gum input \
+    --placeholder "username" \
+    --prompt "  Username  › " \
+    --header "  Local user account" \
+    --value "user") || { s_step "Aborted."; exit 0; }
 [[ -z "$USERNAME" ]] && USERNAME="user"
 
-# Single password — used for user, root, and LUKS disk encryption
+echo ""
 while true; do
-    PASSWORD=$(dialog --backtitle "$BT" \
-        --title " Password " \
-        --stdout \
-        --passwordbox "\n  One password for: login, root, and LUKS encryption.\n\n  Enter password:" 10 54) || { info "Aborted."; exit 0; }
-    PASSWORD2=$(dialog --backtitle "$BT" \
-        --title " Password " \
-        --stdout \
-        --passwordbox "\n  Confirm password:" 8 54) || { info "Aborted."; exit 0; }
-    if [[ "$PASSWORD" == "$PASSWORD2" ]]; then
-        break
-    fi
-    dialog --backtitle "$BT" --title " Mismatch " \
-        --msgbox "\n  Passwords don't match. Please try again." 7 46
+    PASSWORD=$(gum input --password \
+        --placeholder "••••••••" \
+        --prompt "  Password  › " \
+        --header "  One password — login · root · LUKS") || { s_step "Aborted."; exit 0; }
+    PASSWORD2=$(gum input --password \
+        --placeholder "••••••••" \
+        --prompt "  Confirm   › ") || { s_step "Aborted."; exit 0; }
+    [[ "$PASSWORD" == "$PASSWORD2" ]] && { s_ok "Password set"; break; }
+    s_warn "Passwords don't match — try again."
 done
-ROOT_PASSWORD="$PASSWORD"
-LUKS_PASS="$PASSWORD"
 
-# Hostname
-HOSTNAME=$(dialog --backtitle "$BT" \
-    --title " Hostname " \
-    --stdout \
-    --inputbox "\n  Enter hostname:" 8 44 "framework") || { info "Aborted."; exit 0; }
+echo ""
+HOSTNAME=$(gum input \
+    --placeholder "framework" \
+    --prompt "  Hostname  › " \
+    --header "  Machine hostname" \
+    --value "framework") || { s_step "Aborted."; exit 0; }
 HOSTNAME="${HOSTNAME:-framework}"
 
-# Timezone
-dialog --backtitle "$BT" \
-    --title " Timezone " \
-    --infobox "\n  Detecting timezone from IP..." 5 38
-
-DETECTED_TZ=$(curl -s --max-time 5 https://ipapi.co/timezone 2>/dev/null || echo "")
-# Validate: a real timezone contains "/" (e.g. America/New_York) or is "UTC".
-if [[ "$DETECTED_TZ" =~ ^[A-Za-z_]+/[A-Za-z_/+\-]+$ ]] || [[ "$DETECTED_TZ" == "UTC" ]]; then
-    TZ_DEFAULT="$DETECTED_TZ"
-else
-    TZ_DEFAULT="UTC"
+echo ""
+gum spin --title "  Detecting timezone from IP..." -- \
+    bash -c 'curl -s --max-time 5 https://ipapi.co/timezone > /tmp/.sumi-tz 2>/dev/null || echo UTC > /tmp/.sumi-tz'
+DETECTED_TZ=$(cat /tmp/.sumi-tz 2>/dev/null || echo "UTC")
+rm -f /tmp/.sumi-tz
+if [[ ! "$DETECTED_TZ" =~ ^[A-Za-z_]+/[A-Za-z_/+\-]+$ ]] && [[ "$DETECTED_TZ" != "UTC" ]]; then
+    DETECTED_TZ="UTC"
 fi
-
-TIMEZONE=$(dialog --backtitle "$BT" \
-    --title " Timezone " \
-    --stdout \
-    --inputbox "\n  Enter timezone (e.g., America/New_York):" 8 54 "$TZ_DEFAULT") || { info "Aborted."; exit 0; }
+TIMEZONE=$(gum input \
+    --placeholder "America/New_York" \
+    --prompt "  Timezone  › " \
+    --header "  System timezone" \
+    --value "$DETECTED_TZ") || { s_step "Aborted."; exit 0; }
 TIMEZONE="${TIMEZONE:-UTC}"
 
-# ── 4. Patch the JSON configs ──────────────────────────────────
-dialog --backtitle "$BT" \
-    --title " Configuration " \
-    --infobox "\n  Generating archinstall configuration..." 5 46
+# ── 4. Review ────────────────────────────────────────────────────
+s_section "Review"
 
-# Ensure we have jq (should be on the live ISO)
-if ! command -v jq &>/dev/null; then
-    pacman -Sy --noconfirm jq
-fi
+gum style \
+    --border rounded --border-foreground '#313244' --padding "1 3" \
+    "$(gum style --foreground '#cba6f7' --bold '  Installation Summary')" \
+    "" \
+    "  $(gum style --foreground '#585b70' 'Disk      ') $NVME  ($DISK_SIZE_HUMAN)  $(gum style --foreground '#f38ba8' '← WIPED')" \
+    "  $(gum style --foreground '#585b70' 'Encrypt   ') LUKS2  (argon2id)" \
+    "  $(gum style --foreground '#585b70' 'Filesystem') btrfs  (@  @home  @snapshots  @var_log)" \
+    "  $(gum style --foreground '#585b70' 'Bootloader') systemd-boot" \
+    "  $(gum style --foreground '#585b70' 'Hostname  ') $HOSTNAME" \
+    "  $(gum style --foreground '#585b70' 'User      ') $USERNAME  (sudo, shared password)" \
+    "  $(gum style --foreground '#585b70' 'Timezone  ') $TIMEZONE" \
+    "  $(gum style --foreground '#585b70' 'Audio     ') PipeWire" \
+    "  $(gum style --foreground '#585b70' 'Network   ') NetworkManager" \
+    "  $(gum style --foreground '#585b70' 'Desktop   ') Hyprland + sumi rice  (post-boot)"
 
-PATCHED_CONF=$(mktemp)
-PATCHED_CREDS=$(mktemp)
+echo ""
+gum confirm "  Proceed with installation?" \
+    --default=false --prompt.foreground '#f38ba8' || { s_step "Aborted."; exit 0; }
 
-cleanup_secrets() {
-    rm -f "$PATCHED_CONF" "$PATCHED_CREDS"
-}
-trap cleanup_secrets EXIT
-
-jq \
-    --arg disk "$NVME" \
-    --arg host "$HOSTNAME" \
-    --arg tz "$TIMEZONE" \
-    --argjson root_mib "$ROOT_SIZE_MIB" \
-    --arg gfx "$GFX_DRIVER" \
-    '
-    .disk_config.device_modifications[0].device = $disk |
-    .disk_config.device_modifications[0].partitions[1].size.value = $root_mib |
-    .disk_config.device_modifications[0].partitions[1].size.unit = "MiB" |
-    .hostname = $host |
-    .timezone = $tz |
-    .profile_config.gfx_driver = $gfx
-    ' "$CONF" > "$PATCHED_CONF"
-
-jq \
-    --arg user "$USERNAME" \
-    --arg pass "$PASSWORD" \
-    --arg root "$ROOT_PASSWORD" \
-    --arg luks "$LUKS_PASS" \
-    '
-    ."!root-password" = $root |
-    ."!users"[0].username = $user |
-    ."!users"[0]."!password" = $pass |
-    .encryption_password = $luks
-    ' "$CREDS" > "$PATCHED_CREDS"
-
-# ── 5. Review before install ───────────────────────────────────
-dialog --backtitle "$BT" \
-    --title " Review — Final Confirmation " \
-    --defaultno \
-    --yesno "\
-  Disk:        $NVME  ($DISK_SIZE_HUMAN)  ← WIPED
-  Filesystem:  btrfs + LUKS2 encryption
-  Bootloader:  systemd-boot
-  Hostname:    $HOSTNAME
-  User:        $USERNAME  (sudo, shared password)
-  Timezone:    $TIMEZONE
-  GPU:         $GFX_DRIVER
-  Audio:       PipeWire
-  Network:     NetworkManager
-  Desktop:     Hyprland + sumi rice
-
-  This is your last chance to cancel.
-
-  Proceed with installation?" 19 58 || { info "Aborted."; exit 0; }
-
-# ── 6. Run archinstall ─────────────────────────────────────────
-
-# Detect local IP now (used in infobox and error page)
+# ── 5. Install ───────────────────────────────────────────────────
 LOCAL_IP=$(ip -4 addr show scope global \
     | awk '/inet / {split($2,a,"/"); print a[1]; exit}' 2>/dev/null || true)
 [[ -z "$LOCAL_IP" ]] && LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
 [[ -z "$LOCAL_IP" ]] && LOCAL_IP="this-machine"
 
-# Delete luks.py before upgrading so pacman is forced to restore it —
-# a previous bootstrap run may have left a broken patched version behind,
-# and pacman -Sy only reinstalls when a newer package version is available.
-info "Updating archinstall..."
-rm -f /usr/lib/python3*/site-packages/archinstall/lib/luks.py 2>/dev/null || true
-pacman -Sy --noconfirm archinstall 2>/dev/null || true
+clear
+gum style \
+    --border rounded --border-foreground '#313244' --padding "1 3" \
+    "$(gum style --foreground '#cba6f7' --bold '  Installing Arch Linux')" \
+    "$(gum style --foreground '#6c7086' "  On failure → http://${LOCAL_IP}:7777")"
+echo ""
 
-# Wrap cryptsetup to handle exit 5 (CRYPT_BUSY / "device already open").
-# archinstall 3.x: udevd may auto-open a newly formatted LUKS partition
-# before archinstall's own `cryptsetup open` call → exit 5. Patching
-# archinstall's Python is fragile (IndentationErrors across versions), so
-# we intercept at the shell level instead: any open/luksOpen that returns 5
-# is treated as success (the mapper is already there, which is what we want).
-cat > /usr/local/bin/cryptsetup << 'CRYPTWRAP'
-#!/usr/bin/env bash
-/usr/bin/cryptsetup "$@"
-rc=$?
-if [[ $rc -eq 5 ]]; then
-    for arg in "$@"; do
-        case "$arg" in open|luksOpen) exit 0 ;; esac
-    done
-fi
-exit $rc
-CRYPTWRAP
-chmod +x /usr/local/bin/cryptsetup
+: > "$INSTALL_LOG"
+INSTALL_EXIT=0
+set +e
 
-# ── Pre-flight: clear ALL stale disk state from previous attempts ──────────
-# archinstall 3.x: /dev/mapper/root from a prior run causes cryptsetup
-# to fail with exit 5 ("device already exists") when it tries to open the
-# freshly-formatted LUKS partition. Even after umount, the kernel's btrfs
-# subsystem holds a reference that blocks dmsetup remove --force.
-# Fix: drop the page/dentry/inode cache to release kernel FS references,
-# then explicitly close the root mapper before the general DM cleanup.
-
-# 1. Unmount everything under /mnt.
-# Don't use `mountpoint -q /mnt` — btrfs subvol mounts from a previous run
-# land at /mnt/@ /mnt/@home etc., so /mnt itself is NOT a mountpoint and
-# the check returns false, silently skipping the umount entirely.
-# Instead: enumerate all mounts under /mnt with findmnt and tear them down
-# deepest-first, then lazy-unmount anything still stubborn.
-if findmnt -r -n -o TARGET | grep -q '^/mnt'; then
-    info "Unmounting leftover /mnt mounts..."
+# ── Pre-flight: clean stale state ───────────────────────────────
+s_step "Pre-flight cleanup..."
+{
+    echo "==> pre-flight"
+    # Unmount /mnt (handles subvol mounts at /mnt/@ etc.)
     while IFS= read -r mnt; do
         umount "$mnt" 2>/dev/null || umount -l "$mnt" 2>/dev/null || true
     done < <(findmnt -r -n -o TARGET | grep '^/mnt' | sort -r)
-fi
-umount -R /mnt 2>/dev/null || true
+    umount -R /mnt 2>/dev/null || true
 
-# 2. Drop caches so the kernel releases btrfs inode/dentry refs on the mapper
-sync
-echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
-sleep 1
+    # Drop caches so the kernel releases btrfs refs
+    sync
+    echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
+    sleep 1
 
-# 3. Close all non-ISO device mapper devices
-# Try cryptsetup first (graceful), then dmsetup --force (nuclear)
-# "root" is archinstall's LUKS mapper name — handle it explicitly first
-for name in root $(dmsetup ls 2>/dev/null | awk '{print $1}'); do
-    [[ "$name" == "ventoy" ]] && continue
-    [[ "$name" =~ ^sda ]] && continue
-    [[ ! -b "/dev/mapper/$name" ]] && continue
-    cryptsetup close "$name" 2>/dev/null || true
-    [[ -b "/dev/mapper/$name" ]] && dmsetup remove --force "$name" 2>/dev/null || true
-done
+    # Close all non-ISO device mapper devices
+    for name in root $(dmsetup ls 2>/dev/null | awk '{print $1}'); do
+        [[ "$name" == "ventoy" ]] && continue
+        [[ "$name" =~ ^sda ]] && continue
+        [[ ! -b "/dev/mapper/$name" ]] && continue
+        cryptsetup close "$name" 2>/dev/null || true
+        [[ -b "/dev/mapper/$name" ]] && dmsetup remove --force "$name" 2>/dev/null || true
+    done
+} >> "$INSTALL_LOG" 2>&1 || true
+s_ok "Pre-flight done"
 
-# 4. Wipe all FS/partition-table signatures so archinstall finds a blank disk
-wipefs -af "$NVME" 2>/dev/null || true
-partprobe "$NVME" 2>/dev/null || true
-udevadm settle --timeout 10 2>/dev/null || true
-
-# Clear the install log so the error page only shows the current run
-mkdir -p /var/log/archinstall
-: > /var/log/archinstall/install.log
-
-dialog --backtitle "$BT" \
-    --title " Installing Arch Linux " \
-    --infobox "\
-  archinstall is now running silently.
-
-  This will take 5-15 minutes depending
-  on your internet connection speed.
-
-  Do NOT close this terminal.
-
-  If it fails, open in a browser:
-  http://${LOCAL_IP}:7777" 14 52
-
-# Capture exit code without letting set -e kill the script.
-# Redirect stderr to a temp file — archinstall crashes (unhandled
-# Python exceptions) print to stderr, not the log file.
-INSTALL_EXIT=0
-STDERR_LOG=$(mktemp)
-archinstall \
-    --config "$PATCHED_CONF" \
-    --creds "$PATCHED_CREDS" \
-    --silent 2>"$STDERR_LOG" || INSTALL_EXIT=$?
-
-if [[ $INSTALL_EXIT -ne 0 ]]; then
-    ARCHLOG="/var/log/archinstall/install.log"
-
-    # Append stderr to the log so the error page shows the full picture
+# ── Partition ───────────────────────────────────────────────────
+if [[ $INSTALL_EXIT -eq 0 ]]; then
+    s_step "Partitioning $NVME..."
     {
-        echo ""
-        echo "=== stderr (unhandled exceptions / crash output) ==="
-        cat "$STDERR_LOG" 2>/dev/null || echo "(no stderr output)"
-        echo "=== archinstall exit code: $INSTALL_EXIT ==="
-    } >> "$ARCHLOG"
-    rm -f "$STDERR_LOG"
-    PORT=7777
+        echo ""; echo "==> partition"
+        sgdisk --zap-all "$NVME"
+        sgdisk \
+            --new=1:0:+1G  --typecode=1:ef00 --change-name=1:EFI \
+            --new=2:0:0    --typecode=2:8309 --change-name=2:LUKS \
+            "$NVME"
+        partprobe "$NVME"
+        udevadm settle --timeout 10
+    } >> "$INSTALL_LOG" 2>&1 && s_ok "Disk partitioned" || { s_fail "Partitioning failed"; INSTALL_EXIT=1; }
+fi
 
-    # Build a self-contained HTML error page from the install log
+# ── EFI ─────────────────────────────────────────────────────────
+[[ $INSTALL_EXIT -eq 0 ]] && run_step "Formatting EFI" mkfs.fat -F32 "$EFI_PART"
+
+# ── LUKS ────────────────────────────────────────────────────────
+if [[ $INSTALL_EXIT -eq 0 ]]; then
+    s_step "Setting up LUKS2 (slow — hashing key)..."
+    {
+        echo ""; echo "==> LUKS format"
+        printf '%s' "$PASSWORD" | cryptsetup luksFormat \
+            --type luks2 --pbkdf argon2id --hash sha512 \
+            --key-size 512 --iter-time 10000 --batch-mode \
+            "$ROOT_PART" -
+        echo "==> LUKS open"
+        printf '%s' "$PASSWORD" | cryptsetup open "$ROOT_PART" root -
+    } >> "$INSTALL_LOG" 2>&1 && s_ok "LUKS2 configured" || { s_fail "LUKS2 failed"; INSTALL_EXIT=1; }
+fi
+
+# ── btrfs ───────────────────────────────────────────────────────
+[[ $INSTALL_EXIT -eq 0 ]] && run_step "Creating btrfs filesystem" mkfs.btrfs -f /dev/mapper/root
+
+if [[ $INSTALL_EXIT -eq 0 ]]; then
+    s_step "Creating btrfs subvolumes..."
+    {
+        echo ""; echo "==> btrfs subvolumes"
+        mount /dev/mapper/root /mnt
+        btrfs subvolume create /mnt/@
+        btrfs subvolume create /mnt/@home
+        btrfs subvolume create /mnt/@snapshots
+        btrfs subvolume create /mnt/@var_log
+        umount /mnt
+    } >> "$INSTALL_LOG" 2>&1 && s_ok "Subvolumes created" || { s_fail "Subvolume creation failed"; INSTALL_EXIT=1; }
+fi
+
+# ── Mount ───────────────────────────────────────────────────────
+if [[ $INSTALL_EXIT -eq 0 ]]; then
+    s_step "Mounting filesystems..."
+    {
+        echo ""; echo "==> mount"
+        mount -o subvol=@,compress=zstd,noatime /dev/mapper/root /mnt
+        mkdir -p /mnt/{boot,home,.snapshots,var/log}
+        mount "$EFI_PART" /mnt/boot
+        mount -o subvol=@home,compress=zstd,noatime      /dev/mapper/root /mnt/home
+        mount -o subvol=@snapshots,compress=zstd,noatime /dev/mapper/root /mnt/.snapshots
+        mount -o subvol=@var_log,compress=zstd,noatime   /dev/mapper/root /mnt/var/log
+    } >> "$INSTALL_LOG" 2>&1 && s_ok "Filesystems mounted" || { s_fail "Mount failed"; INSTALL_EXIT=1; }
+fi
+
+# ── Packages ────────────────────────────────────────────────────
+if [[ $INSTALL_EXIT -eq 0 ]]; then
+    s_step "Installing packages (5-15 min, downloading from internet)..."
+    {
+        echo ""; echo "==> pacstrap"
+        pacstrap -K /mnt \
+            base base-devel linux linux-firmware amd-ucode \
+            btrfs-progs cryptsetup dosfstools efibootmgr \
+            networkmanager zram-generator linux-headers \
+            hyprland hyprpaper hyprlock hypridle hyprpicker \
+            xdg-desktop-portal-hyprland \
+            foot waybar fuzzel dunst \
+            grim slurp wl-clipboard cliphist polkit-gnome \
+            cava brightnessctl playerctl pulsemixer wtype \
+            bluez bluez-utils \
+            yazi ffmpegthumbnailer p7zip unar poppler \
+            fd ripgrep fzf zoxide \
+            imv mpv zathura zathura-pdf-mupdf \
+            btop neovim ncdu \
+            git lazygit \
+            greetd greetd-tuigreet plymouth \
+            jq bc imagemagick python-pillow \
+            starship zsh zsh-autosuggestions zsh-syntax-highlighting \
+            bat eza tokei procs duf dust \
+            noto-fonts noto-fonts-cjk noto-fonts-emoji \
+            ttf-jetbrains-mono-nerd ttf-font-awesome \
+            qt5-wayland qt6-wayland \
+            pipewire pipewire-alsa pipewire-audio pipewire-jack pipewire-pulse wireplumber \
+            power-profiles-daemon fprintd fwupd libfprint iio-sensor-proxy \
+            mesa vulkan-radeon libva-mesa-driver mesa-vdpau \
+            acpi_call acpid wf-recorder inotify-tools xdg-utils \
+            gum
+    } >> "$INSTALL_LOG" 2>&1 && s_ok "Packages installed" || { s_fail "Package installation failed"; INSTALL_EXIT=1; }
+fi
+
+# ── fstab ───────────────────────────────────────────────────────
+if [[ $INSTALL_EXIT -eq 0 ]]; then
+    run_step "Generating fstab" bash -c 'genfstab -U /mnt >> /mnt/etc/fstab'
+    LUKS_UUID=$(blkid -s UUID -o value "$ROOT_PART" 2>/dev/null)
+fi
+
+# ── Chroot configuration ─────────────────────────────────────────
+if [[ $INSTALL_EXIT -eq 0 ]]; then
+    s_step "Configuring system in chroot..."
+    mkdir -p /mnt/tmp
+    CHROOT_SCRIPT=/mnt/tmp/sumi-chroot-setup.sh
+
+    # Write the setup script — outer ${VAR} expands here (not sensitive),
+    # password is passed via SUMI_PASS env var (never written to disk).
+    cat > "$CHROOT_SCRIPT" << CHROOT_EOF
+#!/bin/bash
+set -euo pipefail
+
+TIMEZONE="${TIMEZONE}"
+HOSTNAME="${HOSTNAME}"
+USERNAME="${USERNAME}"
+LUKS_UUID="${LUKS_UUID}"
+
+echo "==> timezone"
+ln -sf "/usr/share/zoneinfo/\${TIMEZONE}" /etc/localtime
+hwclock --systohc
+
+echo "==> locale"
+echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
+locale-gen
+echo "LANG=en_US.UTF-8" > /etc/locale.conf
+echo "KEYMAP=us" > /etc/vconsole.conf
+
+echo "==> hostname"
+echo "\${HOSTNAME}" > /etc/hostname
+printf '127.0.0.1\tlocalhost\n::1\t\tlocalhost\n127.0.1.1\t%s.localdomain %s\n' \
+    "\${HOSTNAME}" "\${HOSTNAME}" > /etc/hosts
+
+echo "==> pacman (multilib + parallel downloads)"
+sed -i '/^\[multilib\]/,/^Include/ s/^#//' /etc/pacman.conf
+sed -i 's/^#ParallelDownloads.*/ParallelDownloads = 5/' /etc/pacman.conf
+
+echo "==> mkinitcpio (encrypt hook for LUKS)"
+sed -i 's/^HOOKS=.*/HOOKS=(base udev autodetect microcode modconf kms keyboard keymap consolefont block encrypt filesystems fsck)/' \
+    /etc/mkinitcpio.conf
+mkinitcpio -P
+
+echo "==> systemd-boot"
+bootctl install
+mkdir -p /boot/loader/entries
+cat > /boot/loader/loader.conf << 'LOADER'
+default arch.conf
+timeout 3
+console-mode max
+editor no
+LOADER
+cat > /boot/loader/entries/arch.conf << ENTRY
+title   Arch Linux
+linux   /vmlinuz-linux
+initrd  /amd-ucode.img
+initrd  /initramfs-linux.img
+options cryptdevice=UUID=\${LUKS_UUID}:root root=/dev/mapper/root rootflags=subvol=@ rw quiet
+ENTRY
+
+echo "==> users"
+echo "root:\${SUMI_PASS}" | chpasswd
+useradd -m -G wheel,video,audio,input,storage -s /bin/zsh "\${USERNAME}"
+echo "\${USERNAME}:\${SUMI_PASS}" | chpasswd
+echo "%wheel ALL=(ALL:ALL) NOPASSWD: ALL" > /etc/sudoers.d/wheel
+chmod 440 /etc/sudoers.d/wheel
+
+echo "==> services"
+systemctl enable NetworkManager
+systemctl enable bluetooth
+systemctl enable power-profiles-daemon
+systemctl enable acpid
+systemctl enable fstrim.timer
+systemctl enable systemd-boot-update.service
+
+echo "==> zram"
+cat > /etc/systemd/zram-generator.conf << 'ZRAM'
+[zram0]
+zram-size = min(ram / 2, 8192)
+compression-algorithm = zstd
+ZRAM
+
+echo "==> done"
+CHROOT_EOF
+
+    chmod +x "$CHROOT_SCRIPT"
+    {
+        echo ""; echo "==> chroot setup"
+        SUMI_PASS="$PASSWORD" arch-chroot /mnt /tmp/sumi-chroot-setup.sh
+    } >> "$INSTALL_LOG" 2>&1 && s_ok "System configured" || { s_fail "Chroot configuration failed"; INSTALL_EXIT=1; }
+    rm -f "$CHROOT_SCRIPT"
+fi
+
+set -e
+
+# ── Error page ───────────────────────────────────────────────────
+if [[ $INSTALL_EXIT -ne 0 ]]; then
+    PORT=7777
     WEB_DIR=$(mktemp -d)
     python3 - <<PYEOF
 import html, pathlib
-log_path = "$ARCHLOG"
+log_path = "$INSTALL_LOG"
 exit_code = "$INSTALL_EXIT"
 web_dir = "$WEB_DIR"
 try:
@@ -402,33 +480,8 @@ try:
 except Exception as e:
     log = f"Log file not available ({e})"
 
-# Clean view: collapse each Python traceback to just the exception message.
-# Full traceback is still available in the "Full Log" tab.
-import re as _re
 lines = log.splitlines()
-cleaned = []
-i = 0
-while i < len(lines):
-    line = lines[i]
-    if '- ERROR -' in line:
-        # Strip "Traceback (most recent call last):" from the header line
-        cleaned.append(_re.sub(r'\s*Traceback \(most recent call last\):\s*$', '', line))
-        # Collect the traceback block (everything until the next timestamp)
-        j, block = i + 1, []
-        while j < len(lines) and not lines[j].startswith('['):
-            block.append(lines[j])
-            j += 1
-        # Find the last meaningful line = the actual exception class: message
-        for bl in reversed(block):
-            s = bl.strip()
-            if s and not s.startswith('File ') and not all(c in ' ~^' for c in s) and s != '...':
-                cleaned.append('  ' + s)
-                break
-        i = j
-    else:
-        cleaned.append(line)
-        i += 1
-error_section = '\n'.join(cleaned)
+tail = '\n'.join(lines[-80:]) if len(lines) > 80 else log
 
 page = f"""<!DOCTYPE html>
 <html lang="en">
@@ -452,17 +505,17 @@ page = f"""<!DOCTYPE html>
   </style>
 </head>
 <body>
-  <h1>sumi :: archinstall failed</h1>
+  <h1>sumi :: installation failed</h1>
   <p class="meta">exit code <span>{exit_code}</span> &nbsp;·&nbsp; log <span>{log_path}</span></p>
   <div class="tabs">
-    <button class="active" onclick="show('error')" id="tab-error">Error</button>
+    <button class="active" onclick="show('tail')" id="tab-tail">Error (last 80 lines)</button>
     <button onclick="show('full')" id="tab-full">Full Log</button>
   </div>
-  <pre id="pane-error">{html.escape(error_section)}</pre>
+  <pre id="pane-tail">{html.escape(tail)}</pre>
   <pre id="pane-full" style="display:none">{html.escape(log)}</pre>
   <script>
   function show(id){{
-    ['error','full'].forEach(function(p){{
+    ['tail','full'].forEach(function(p){{
       document.getElementById('pane-'+p).style.display=p===id?'':'none';
       document.getElementById('tab-'+p).className=p===id?'active':'';
     }});
@@ -473,109 +526,48 @@ page = f"""<!DOCTYPE html>
 pathlib.Path(web_dir + "/index.html").write_text(page)
 PYEOF
 
-    # Start HTTP server in background
     ( cd "$WEB_DIR" && python3 -m http.server $PORT ) &>/dev/null &
     SERVER_PID=$!
-
-    # Replace EXIT trap so we clean up server + web dir on exit
-    trap "kill $SERVER_PID 2>/dev/null; rm -rf '$WEB_DIR'; rm -f '$PATCHED_CONF' '$PATCHED_CREDS'" EXIT
-
-    dialog --backtitle "$BT" \
-        --title " Installation Failed " \
-        --msgbox "\n  archinstall exited with code $INSTALL_EXIT.\n\n  Open this in a browser on your network:\n\n    http://${LOCAL_IP}:${PORT}\n\n  Press OK — the server will keep running.\n  Press Ctrl+C in the terminal to stop it." 14 56
+    trap "kill $SERVER_PID 2>/dev/null; rm -rf '$WEB_DIR'" EXIT
 
     echo ""
-    echo -e "${BLD}${CYN}  http://${LOCAL_IP}:${PORT}${RST}"
-    echo ""
-    echo -e "  Press Ctrl+C to stop the server and exit."
-    echo ""
+    gum style \
+        --border rounded --border-foreground '#f38ba8' --padding "1 3" \
+        "$(gum style --foreground '#f38ba8' --bold '  Installation failed')" \
+        "" \
+        "  Open in a browser on your network:" \
+        "$(gum style --foreground '#89b4fa' "  http://${LOCAL_IP}:${PORT}")" \
+        "" \
+        "$(gum style --foreground '#6c7086' '  Press Ctrl+C to stop the server and exit.')"
 
     wait $SERVER_PID 2>/dev/null || true
     exit 1
 fi
 
-rm -f "$STDERR_LOG"
-ok "archinstall completed successfully!"
+echo ""
+s_ok "Installation complete!"
 
-# ── 7. Create btrfs subvolumes ────────────────────────────────
-# archinstall 3.x has a bug with btrfs subvolume configs so we create
-# them here manually after the install, then update fstab accordingly.
-dialog --backtitle "$BT" \
-    --title " Post-Install " \
-    --infobox "\n  Creating btrfs subvolumes..." 5 38
-
-ROOT_DEV=$(findmnt -n -o SOURCE /mnt 2>/dev/null || true)
-
-if [[ -z "$ROOT_DEV" ]]; then
-    warn "Could not detect mounted root device — skipping btrfs subvolumes."
-    warn "Create them manually after reboot if needed."
-else
-    BTRFS_MNT=$(mktemp -d)
-    mount -o subvolid=5 "$ROOT_DEV" "$BTRFS_MNT"
-
-    # Create a snapshot of the existing root content as the @ subvolume
-    btrfs subvolume snapshot "$BTRFS_MNT" "$BTRFS_MNT/@" 2>/dev/null \
-        || btrfs subvolume create "$BTRFS_MNT/@"
-
-    # Create empty sibling subvolumes
-    btrfs subvolume create "$BTRFS_MNT/@home"      2>/dev/null || true
-    btrfs subvolume create "$BTRFS_MNT/@snapshots" 2>/dev/null || true
-    btrfs subvolume create "$BTRFS_MNT/@var_log"   2>/dev/null || true
-
-    # Populate @home and @var_log from the installed system if present
-    [[ -d "$BTRFS_MNT/@/home" ]]    && cp -a "$BTRFS_MNT/@/home/."    "$BTRFS_MNT/@home/"
-    [[ -d "$BTRFS_MNT/@/var/log" ]] && cp -a "$BTRFS_MNT/@/var/log/." "$BTRFS_MNT/@var_log/"
-
-    umount "$BTRFS_MNT"
-    rmdir  "$BTRFS_MNT"
-
-    # Re-mount /mnt with the @ subvolume as root
-    umount -R /mnt 2>/dev/null || true
-    mount -o subvol=@,compress=zstd,noatime "$ROOT_DEV" /mnt
-    mkdir -p /mnt/{boot,home,.snapshots,var/log}
-    mount "${NVME}p1" /mnt/boot  2>/dev/null \
-        || mount "${NVME}1" /mnt/boot 2>/dev/null || true
-    mount -o subvol=@home,compress=zstd,noatime      "$ROOT_DEV" /mnt/home
-    mount -o subvol=@snapshots,compress=zstd,noatime "$ROOT_DEV" /mnt/.snapshots
-    mount -o subvol=@var_log,compress=zstd,noatime   "$ROOT_DEV" /mnt/var/log
-
-    # Rewrite fstab with the correct subvolume mount options
-    ROOT_UUID=$(blkid -s UUID -o value "$ROOT_DEV")
-    EFI_UUID=$(blkid -s UUID -o value "${NVME}p1" 2>/dev/null \
-               || blkid -s UUID -o value "${NVME}1" 2>/dev/null || echo "")
-    {
-        echo "# Generated by sumi bootstrap"
-        [[ -n "$EFI_UUID" ]] && \
-            echo "UUID=$EFI_UUID  /boot       vfat  defaults             0 2"
-        echo "UUID=$ROOT_UUID  /            btrfs subvol=@,compress=zstd,noatime 0 0"
-        echo "UUID=$ROOT_UUID  /home        btrfs subvol=@home,compress=zstd,noatime 0 0"
-        echo "UUID=$ROOT_UUID  /.snapshots  btrfs subvol=@snapshots,compress=zstd,noatime 0 0"
-        echo "UUID=$ROOT_UUID  /var/log     btrfs subvol=@var_log,compress=zstd,noatime 0 0"
-    } > /mnt/etc/fstab
-
-    ok "btrfs subvolumes created and fstab updated"
-fi
-
-# ── 8. Stage sumi for first boot ──────────────────────────────
-dialog --backtitle "$BT" \
-    --title " Post-Install " \
-    --infobox "\n  Staging sumi for first boot..." 5 40
+# ── 6. Stage sumi for first boot ─────────────────────────────────
+s_section "Staging First Boot"
 
 TARGET="/mnt"
+
 if [[ ! -d "$TARGET/home/$USERNAME" ]]; then
-    dialog --backtitle "$BT" \
-        --title " Warning " \
-        --msgbox "\n  Cannot find installed system at /mnt/home/$USERNAME\n\n  archinstall may have used a different mount point or\n  the user wasn't created.\n\n  After reboot, run manually:\n    git clone <repo> ~/sumi\n    cd ~/sumi && ./install.sh" 14 58
+    s_warn "Cannot find /mnt/home/$USERNAME — stage manually after reboot."
+    gum style \
+        --border rounded --border-foreground '#f9e2af' --padding "0 2" \
+        "  git clone <repo> ~/sumi" \
+        "  cd ~/sumi && ./install.sh"
     exit 0
 fi
 
-# Copy sumi repo to the new user's home
+s_step "Copying sumi repo..."
 SUMI_DEST="$TARGET/home/$USERNAME/sumi"
 rm -rf "$SUMI_DEST" 2>/dev/null || true
 cp -r "$SCRIPT_DIR" "$SUMI_DEST"
 arch-chroot "$TARGET" chown -R "$USERNAME:$USERNAME" "/home/$USERNAME/sumi" 2>/dev/null || true
+s_ok "Repo copied to /home/$USERNAME/sumi"
 
-# Create a first-boot script that runs install.sh automatically
 cat > "$TARGET/home/$USERNAME/.sumi-first-boot.sh" << 'FIRSTBOOT'
 #!/usr/bin/env bash
 # sumi first-boot installer — runs once then self-deletes
@@ -588,18 +580,16 @@ if [[ -d "$HOME/sumi" ]]; then
     echo "║   sumi :: first boot setup           ║"
     echo "╚══════════════════════════════════════╝"
     echo ""
-    echo "Running sumi post-install..."
-    echo ""
     cd "$HOME/sumi"
     chmod +x install.sh
     if bash install.sh; then
         touch "$MARKER"
         rm -f "$HOME/.sumi-first-boot.sh"
         echo ""
-        echo "sumi installed successfully! Reboot for the full experience."
+        echo "sumi installed! Reboot for the full experience."
     else
         echo ""
-        echo "Install failed. It will retry on next login, or run manually:"
+        echo "Install failed. Retry on next login, or:"
         echo "  cd ~/sumi && ./install.sh"
     fi
 fi
@@ -607,7 +597,6 @@ FIRSTBOOT
 chmod +x "$TARGET/home/$USERNAME/.sumi-first-boot.sh"
 arch-chroot "$TARGET" chown "$USERNAME:$USERNAME" "/home/$USERNAME/.sumi-first-boot.sh" 2>/dev/null || true
 
-# Add to .bash_profile so it runs on first TTY login
 BASH_PROFILE="$TARGET/home/$USERNAME/.bash_profile"
 if [[ ! -f "$BASH_PROFILE" ]] || ! grep -q "sumi-first-boot" "$BASH_PROFILE" 2>/dev/null; then
     cat >> "$BASH_PROFILE" << 'EOF'
@@ -617,30 +606,30 @@ if [[ ! -f "$BASH_PROFILE" ]] || ! grep -q "sumi-first-boot" "$BASH_PROFILE" 2>/
 EOF
     arch-chroot "$TARGET" chown "$USERNAME:$USERNAME" "/home/$USERNAME/.bash_profile" 2>/dev/null || true
 fi
+s_ok "First-boot hook installed"
 
-# ── 9. Done ────────────────────────────────────────────────────
-dialog --backtitle "$BT" \
-    --title " Bootstrap Complete " \
-    --msgbox "\
-  Arch Linux is installed successfully!
+# ── 7. Done ──────────────────────────────────────────────────────
+echo ""
+gum style \
+    --border rounded --border-foreground '#a6e3a1' \
+    --margin "1 2" --padding "1 4" \
+    "$(gum style --foreground '#a6e3a1' --bold '  ✓  Arch Linux installed')" \
+    "" \
+    "$(gum style --foreground '#cba6f7' '  First boot:')" \
+    "  1. Unlock LUKS  (your encryption password)" \
+    "  2. Login as $(gum style --foreground '#f38ba8' "$USERNAME") at the TTY" \
+    "  3. sumi installs automatically" \
+    "" \
+    "$(gum style --foreground '#cba6f7' '  Second reboot:')" \
+    "  · Full Hyprland desktop" \
+    "  · SUPER+X  control center" \
+    "  · SUPER+/  keybind cheatsheet" \
+    "" \
+    "$(gum style --foreground '#585b70' '  If first-boot fails:  cd ~/sumi && ./install.sh')"
 
-  On first boot:
-    1. Unlock LUKS  (your encryption password)
-    2. Login as $USERNAME at the TTY
-    3. sumi installs automatically
-
-  On second reboot:
-    · Plymouth TUI unlock → auto login
-    · Full Hyprland desktop with theming
-    · SUPER+X for control center
-    · SUPER+/ for keybind cheatsheet
-
-  If first-boot auto-install fails:
-    cd ~/sumi && ./install.sh" 20 54
-
-dialog --backtitle "$BT" \
-    --title " Reboot " \
-    --yesno "\n  Reboot into your new system now?" 7 42 && {
+echo ""
+gum confirm "  Reboot now?" && {
     umount -R /mnt 2>/dev/null || true
+    cryptsetup close root 2>/dev/null || true
     reboot
 }
