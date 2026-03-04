@@ -19,29 +19,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONF="$SCRIPT_DIR/archinstall/user_configuration.json"
 CREDS="$SCRIPT_DIR/archinstall/user_credentials.json"
 
-# ── Colors ──────────────────────────────────────────────────
+# Colors (used for non-dialog terminal output)
 RED='\033[0;31m'
 GRN='\033[0;32m'
 CYN='\033[0;36m'
-DIM='\033[0;90m'
 YLW='\033[0;33m'
 BLD='\033[1m'
 RST='\033[0m'
 
-clear
-echo -e "${DIM}╔══════════════════════════════════════════╗${RST}"
-echo -e "${CYN}║   sumi :: arch linux bootstrap           ║${RST}"
-echo -e "${DIM}║   Framework 13 AMD · Hyprland · TUI      ║${RST}"
-echo -e "${DIM}╚══════════════════════════════════════════╝${RST}"
-echo ""
+BT="sumi :: arch linux bootstrap"
 
-info()    { echo -e "${CYN}:: ${RST}$1"; }
-ok()      { echo -e "${GRN}   ✓${RST} $1"; }
-warn()    { echo -e "${YLW}   !${RST} $1"; }
-err()     { echo -e "${RED}   ✗${RST} $1"; }
-prompt()  { echo -ne "${CYN}:: ${RST}$1"; }
+info()  { echo -e "${CYN}:: ${RST}$1"; }
+ok()    { echo -e "${GRN}   ✓${RST} $1"; }
+warn()  { echo -e "${YLW}   !${RST} $1"; }
+err()   { echo -e "${RED}   ✗${RST} $1"; }
 
-# ── 0. Sanity checks ───────────────────────────────────────
+# ── 0. Sanity checks ───────────────────────────────────────────
 if [[ ! -f "$CONF" ]]; then
     err "Cannot find: $CONF"
     err "Make sure you're running this from the sumi repo root."
@@ -68,73 +61,75 @@ CREDSTPL
     ok "Generated $CREDS"
 fi
 
-if [[ ! -d /run/archiso ]]; then
-    warn "This doesn't look like the Arch live ISO."
-    warn "This script is meant to be run from the installer."
-    prompt "Continue anyway? [y/N] "
-    read -r cont
-    [[ ! "$cont" =~ ^[Yy]$ ]] && exit 0
+# ── Install dialog if missing ──────────────────────────────────
+if ! command -v dialog &>/dev/null; then
+    info "Installing dialog..."
+    pacman -Sy --noconfirm dialog &>/dev/null
 fi
 
-# ── 1. Network ─────────────────────────────────────────────
-echo ""
-info "Checking network connectivity..."
+# ── Welcome ────────────────────────────────────────────────────
+dialog --backtitle "$BT" \
+    --title " sumi " \
+    --msgbox "\n  Framework 13 AMD  ·  Hyprland  ·  TUI\n\n  This script installs Arch Linux with:\n    · Full disk encryption (LUKS2)\n    · btrfs with subvolumes\n    · Hyprland + sumi rice (post-boot)\n\n  Press OK to begin." 13 52
 
-if ping -c 1 -W 3 archlinux.org &>/dev/null; then
-    ok "Internet connection detected"
-else
-    warn "No internet connection."
-    echo ""
-    info "Connect via WiFi using iwctl:"
-    echo -e "${DIM}   The WiFi setup wizard will now launch.${RST}"
-    echo -e "${DIM}   Commands: station wlan0 scan${RST}"
-    echo -e "${DIM}             station wlan0 get-networks${RST}"
-    echo -e "${DIM}             station wlan0 connect <SSID>${RST}"
-    echo -e "${DIM}             exit${RST}"
-    echo ""
-    prompt "Press Enter to open iwctl (or Ctrl+C to abort)... "
-    read -r
+# ── Non-ISO warning ────────────────────────────────────────────
+if [[ ! -d /run/archiso ]]; then
+    dialog --backtitle "$BT" \
+        --title " Warning " \
+        --defaultno \
+        --yesno "\n  This doesn't look like the Arch Linux live ISO.\n\n  This script is designed to run from the installer.\n\n  Continue anyway?" 11 52 || exit 0
+fi
+
+# ── 1. Network ─────────────────────────────────────────────────
+dialog --backtitle "$BT" \
+    --title " Network " \
+    --infobox "\n  Checking internet connectivity..." 5 42
+
+if ! ping -c 1 -W 3 archlinux.org &>/dev/null; then
+    dialog --backtitle "$BT" \
+        --title " No Internet " \
+        --msgbox "\n  No internet connection detected.\n\n  Press OK to open iwctl and connect to WiFi.\n\n  Commands:\n    station wlan0 scan\n    station wlan0 get-networks\n    station wlan0 connect <SSID>\n    exit" 15 52
+
+    clear
     iwctl || true
 
-    # Re-check
     sleep 2
-    if ping -c 1 -W 3 archlinux.org &>/dev/null; then
-        ok "Connected!"
-    else
-        err "Still no internet. Connect manually and re-run this script."
+    if ! ping -c 1 -W 3 archlinux.org &>/dev/null; then
+        dialog --backtitle "$BT" \
+            --title " Error " \
+            --msgbox "\n  Still no internet connection.\n\n  Please connect manually and re-run this script." 9 52
         exit 1
     fi
 fi
 
-# ── 2. Detect disk ─────────────────────────────────────────
-echo ""
-info "Detecting NVMe drive..."
+# ── 2. Detect disk ─────────────────────────────────────────────
+dialog --backtitle "$BT" \
+    --title " Disk Detection " \
+    --infobox "\n  Scanning for disks..." 5 38
 
-DISKS=$(lsblk -dno NAME,SIZE,TYPE | grep disk | awk '{print "/dev/"$1" ("$2")"}') || true
-NVME=$(lsblk -dno NAME,SIZE,TYPE | grep disk | grep nvme | head -1 | awk '{print "/dev/"$1}') || true
+NVME_DEFAULT=$(lsblk -dno NAME,TYPE | grep disk | grep nvme | head -1 | awk '{print "/dev/"$1}') || true
 
-echo -e "${DIM}   Available disks:${RST}"
-echo "$DISKS" | while read -r line; do
-    echo -e "${DIM}     $line${RST}"
-done
-echo ""
+MENU_ITEMS=()
+while read -r name size; do
+    MENU_ITEMS+=("/dev/$name" "$size")
+done < <(lsblk -dno NAME,SIZE,TYPE | grep disk | awk '{print $1, $2}')
 
-if [[ -n "$NVME" ]]; then
-    info "Detected NVMe: $NVME"
-    prompt "Use $NVME? [Y/n] "
-    read -r use_nvme
-    if [[ "$use_nvme" =~ ^[Nn]$ ]]; then
-        prompt "Enter device path (e.g., /dev/sda): "
-        read -r NVME
-    fi
-else
-    warn "No NVMe detected."
-    prompt "Enter device path (e.g., /dev/nvme0n1 or /dev/sda): "
-    read -r NVME
+if [[ ${#MENU_ITEMS[@]} -eq 0 ]]; then
+    dialog --backtitle "$BT" --title " Error " \
+        --msgbox "\n  No disks detected.\n\n  Please check your hardware and try again." 9 48
+    exit 1
 fi
 
+NVME=$(dialog --backtitle "$BT" \
+    --title " Select Installation Disk " \
+    --stdout \
+    --default-item "${NVME_DEFAULT:-${MENU_ITEMS[0]}}" \
+    --menu "\n  Select the disk to install Arch Linux on.\n\n  WARNING: The selected disk will be WIPED." 14 56 6 \
+    "${MENU_ITEMS[@]}") || { info "Aborted."; exit 0; }
+
 if [[ ! -b "$NVME" ]]; then
-    err "$NVME is not a valid block device."
+    dialog --backtitle "$BT" --title " Error " \
+        --msgbox "\n  $NVME is not a valid block device." 7 48
     exit 1
 fi
 
@@ -142,7 +137,6 @@ fi
 # EFI ends at 1025 MiB; leave 1 MiB at the end for the backup GPT header.
 DISK_SIZE_MIB=$(lsblk -bdno SIZE "$NVME" | awk '{print int($1/1024/1024)}')
 ROOT_SIZE_MIB=$((DISK_SIZE_MIB - 1025 - 1))
-ok "Disk size: ${DISK_SIZE_MIB} MiB → root partition: ${ROOT_SIZE_MIB} MiB"
 
 # Detect GPU for the correct archinstall gfx_driver value
 if lspci 2>/dev/null | grep -qi "nvidia"; then
@@ -152,90 +146,81 @@ elif lspci 2>/dev/null | grep -qiE "intel.*(graphics|vga|display)"; then
 else
     GFX_DRIVER="AMD / ATI (open-source)"   # covers AMD, ATI, and unknown
 fi
-ok "GPU driver: $GFX_DRIVER"
 
-echo -e "${RED}${BLD}"
-echo "   ⚠  WARNING: This will WIPE $NVME completely."
-echo -e "${RST}"
-prompt "Type 'yes' to confirm: "
-read -r wipe_confirm
-if [[ "$wipe_confirm" != "yes" ]]; then
-    info "Aborted."
-    exit 0
-fi
+# Wipe confirmation
+DISK_SIZE_HUMAN=$(lsblk -dno SIZE "$NVME")
+dialog --backtitle "$BT" \
+    --title " ⚠  DESTRUCTIVE ACTION " \
+    --defaultno \
+    --yesno "\n  $NVME  ($DISK_SIZE_HUMAN)\n\n  ALL DATA ON THIS DISK WILL BE PERMANENTLY ERASED.\n  This cannot be undone.\n\n  Are you absolutely sure?" 12 56 || { info "Aborted."; exit 0; }
 
-# ── 3. Collect user settings ──────────────────────────────
-echo ""
-echo -e "${DIM}╔══════════════════════════════════════════╗${RST}"
-echo -e "${CYN}║   user configuration                     ║${RST}"
-echo -e "${DIM}╚══════════════════════════════════════════╝${RST}"
-echo ""
+# ── 3. Collect user settings ───────────────────────────────────
 
 # Username
-prompt "Username: "
-read -r USERNAME
-if [[ -z "$USERNAME" ]]; then
-    USERNAME="user"
-    warn "Defaulting to 'user'"
-fi
+USERNAME=$(dialog --backtitle "$BT" \
+    --title " Username " \
+    --stdout \
+    --inputbox "\n  Enter your username:" 8 44 "user") || { info "Aborted."; exit 0; }
+[[ -z "$USERNAME" ]] && USERNAME="user"
 
 # Single password — used for user, root, and LUKS disk encryption
-info "One password will be used for: user login, root, and LUKS disk encryption."
-info "On cold boot, unlocking LUKS will automatically log you in."
 while true; do
-    prompt "Password: "
-    read -rs PASSWORD
-    echo ""
-    prompt "Confirm password: "
-    read -rs PASSWORD2
-    echo ""
+    PASSWORD=$(dialog --backtitle "$BT" \
+        --title " Password " \
+        --stdout \
+        --passwordbox "\n  One password for: login, root, and LUKS encryption.\n\n  Enter password:" 10 54) || { info "Aborted."; exit 0; }
+    PASSWORD2=$(dialog --backtitle "$BT" \
+        --title " Password " \
+        --stdout \
+        --passwordbox "\n  Confirm password:" 8 54) || { info "Aborted."; exit 0; }
     if [[ "$PASSWORD" == "$PASSWORD2" ]]; then
         break
-    else
-        warn "Passwords don't match. Try again."
     fi
+    dialog --backtitle "$BT" --title " Mismatch " \
+        --msgbox "\n  Passwords don't match. Please try again." 7 46
 done
 ROOT_PASSWORD="$PASSWORD"
 LUKS_PASS="$PASSWORD"
-ok "User, root, and LUKS passwords set to the same value"
 
 # Hostname
-echo ""
-prompt "Hostname [framework]: "
-read -r HOSTNAME
+HOSTNAME=$(dialog --backtitle "$BT" \
+    --title " Hostname " \
+    --stdout \
+    --inputbox "\n  Enter hostname:" 8 44 "framework") || { info "Aborted."; exit 0; }
 HOSTNAME="${HOSTNAME:-framework}"
 
 # Timezone
-echo ""
-info "Timezone detection..."
+dialog --backtitle "$BT" \
+    --title " Timezone " \
+    --infobox "\n  Detecting timezone from IP..." 5 38
+
 DETECTED_TZ=$(curl -s --max-time 5 https://ipapi.co/timezone 2>/dev/null || echo "")
 # Validate: a real timezone contains "/" (e.g. America/New_York) or is "UTC".
-# Discard rate-limit messages, HTML, or other garbage the API might return.
 if [[ "$DETECTED_TZ" =~ ^[A-Za-z_]+/[A-Za-z_/+\-]+$ ]] || [[ "$DETECTED_TZ" == "UTC" ]]; then
-    prompt "Timezone [$DETECTED_TZ]: "
-    read -r TIMEZONE
-    TIMEZONE="${TIMEZONE:-$DETECTED_TZ}"
+    TZ_DEFAULT="$DETECTED_TZ"
 else
-    [[ -n "$DETECTED_TZ" ]] && warn "Timezone detection returned invalid value: '$DETECTED_TZ'"
-    prompt "Timezone (e.g., America/New_York) [UTC]: "
-    read -r TIMEZONE
-    TIMEZONE="${TIMEZONE:-UTC}"
+    TZ_DEFAULT="UTC"
 fi
 
-# ── 4. Patch the JSON configs ─────────────────────────────
-echo ""
-info "Generating archinstall configuration..."
+TIMEZONE=$(dialog --backtitle "$BT" \
+    --title " Timezone " \
+    --stdout \
+    --inputbox "\n  Enter timezone (e.g., America/New_York):" 8 54 "$TZ_DEFAULT") || { info "Aborted."; exit 0; }
+TIMEZONE="${TIMEZONE:-UTC}"
+
+# ── 4. Patch the JSON configs ──────────────────────────────────
+dialog --backtitle "$BT" \
+    --title " Configuration " \
+    --infobox "\n  Generating archinstall configuration..." 5 46
 
 # Ensure we have jq (should be on the live ISO)
 if ! command -v jq &>/dev/null; then
     pacman -Sy --noconfirm jq
 fi
 
-# Patch user_configuration.json
 PATCHED_CONF=$(mktemp)
 PATCHED_CREDS=$(mktemp)
 
-# Trap ensures password temp files are always cleaned up, even on crash/set -e exit
 cleanup_secrets() {
     rm -f "$PATCHED_CONF" "$PATCHED_CREDS"
 }
@@ -256,14 +241,6 @@ jq \
     .profile_config.gfx_driver = $gfx
     ' "$CONF" > "$PATCHED_CONF"
 
-ok "Patched user_configuration.json"
-echo -e "${DIM}     disk:     $NVME${RST}"
-echo -e "${DIM}     hostname: $HOSTNAME${RST}"
-echo -e "${DIM}     timezone: $TIMEZONE${RST}"
-echo -e "${DIM}     encrypt:  LUKS on root${RST}"
-echo -e "${DIM}     gpu:      $GFX_DRIVER${RST}"
-
-# Patch user_credentials.json
 jq \
     --arg user "$USERNAME" \
     --arg pass "$PASSWORD" \
@@ -276,43 +253,36 @@ jq \
     .encryption_password = $luks
     ' "$CREDS" > "$PATCHED_CREDS"
 
-ok "Patched user_credentials.json"
-echo -e "${DIM}     user:     $USERNAME (sudo)${RST}"
+# ── 5. Review before install ───────────────────────────────────
+dialog --backtitle "$BT" \
+    --title " Review — Final Confirmation " \
+    --defaultno \
+    --yesno "\
+  Disk:        $NVME  ($DISK_SIZE_HUMAN)  ← WIPED
+  Filesystem:  btrfs + LUKS2 encryption
+  Bootloader:  systemd-boot
+  Hostname:    $HOSTNAME
+  User:        $USERNAME  (sudo, shared password)
+  Timezone:    $TIMEZONE
+  GPU:         $GFX_DRIVER
+  Audio:       PipeWire
+  Network:     NetworkManager
+  Desktop:     Hyprland + sumi rice
 
-# ── 5. Review before install ──────────────────────────────
-echo ""
-echo -e "${DIM}╔══════════════════════════════════════════╗${RST}"
-echo -e "${YLW}║   review before install                  ║${RST}"
-echo -e "${DIM}╚══════════════════════════════════════════╝${RST}"
-echo ""
-echo -e "  Disk:        ${BLD}$NVME${RST} (will be ${RED}WIPED${RST})"
-echo -e "  Filesystem:  btrfs (zstd, subvols: @, @home, @snapshots, @var_log)"
-echo -e "  Encryption:  LUKS on root partition"
-echo -e "  Bootloader:  systemd-boot"
-echo -e "  Hostname:    $HOSTNAME"
-echo -e "  User:        $USERNAME (sudo, root & LUKS share same password)"
-echo -e "  Timezone:    $TIMEZONE"
-echo -e "  Audio:       PipeWire"
-echo -e "  Network:     NetworkManager"
-echo -e "  Desktop:     Hyprland + sumi rice"
-echo -e "  Packages:    ~85 from repos + 5 from AUR (post-boot)"
-echo ""
-echo -e "${RED}${BLD}  This is your last chance to cancel.${RST}"
-echo ""
-prompt "Proceed with installation? [y/N] "
-read -r go
-if [[ ! "$go" =~ ^[Yy]$ ]]; then
-    info "Aborted."
-    exit 0
-fi
+  This is your last chance to cancel.
 
-# ── 6. Run archinstall ────────────────────────────────────
-echo ""
-info "Starting archinstall..."
-echo -e "${DIM}   This will take 5-15 minutes depending on your connection.${RST}"
-echo ""
+  Proceed with installation?" 19 58 || { info "Aborted."; exit 0; }
+
+# ── 6. Run archinstall ─────────────────────────────────────────
+
+# Detect local IP now (used in infobox and error page)
+LOCAL_IP=$(ip -4 addr show scope global \
+    | awk '/inet / {split($2,a,"/"); print a[1]; exit}' 2>/dev/null || true)
+[[ -z "$LOCAL_IP" ]] && LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
+[[ -z "$LOCAL_IP" ]] && LOCAL_IP="this-machine"
 
 # Make sure archinstall is up to date
+info "Updating archinstall..."
 pacman -Sy --noconfirm archinstall 2>/dev/null || true
 
 # Patch archinstall luks.py: treat cryptsetup exit 5 ("device already open")
@@ -388,8 +358,20 @@ udevadm settle --timeout 10 2>/dev/null || true
 mkdir -p /var/log/archinstall
 : > /var/log/archinstall/install.log
 
+dialog --backtitle "$BT" \
+    --title " Installing Arch Linux " \
+    --infobox "\
+  archinstall is now running silently.
+
+  This will take 5-15 minutes depending
+  on your internet connection speed.
+
+  Do NOT close this terminal.
+
+  If it fails, open in a browser:
+  http://${LOCAL_IP}:7777" 14 52
+
 # Capture exit code without letting set -e kill the script
-# (trap cleanup_secrets EXIT handles temp file deletion)
 INSTALL_EXIT=0
 archinstall \
     --config "$PATCHED_CONF" \
@@ -399,12 +381,6 @@ archinstall \
 if [[ $INSTALL_EXIT -ne 0 ]]; then
     ARCHLOG="/var/log/archinstall/install.log"
     PORT=7777
-
-    # Detect local IP (try global scope first, fall back to any)
-    LOCAL_IP=$(ip -4 addr show scope global \
-        | awk '/inet / {split($2,a,"/"); print a[1]; exit}' 2>/dev/null || true)
-    [[ -z "$LOCAL_IP" ]] && LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
-    [[ -z "$LOCAL_IP" ]] && LOCAL_IP="this-machine"
 
     # Build a self-contained HTML error page from the install log
     WEB_DIR=$(mktemp -d)
@@ -496,16 +472,14 @@ PYEOF
     # Replace EXIT trap so we clean up server + web dir on exit
     trap "kill $SERVER_PID 2>/dev/null; rm -rf '$WEB_DIR'; rm -f '$PATCHED_CONF' '$PATCHED_CREDS'" EXIT
 
+    dialog --backtitle "$BT" \
+        --title " Installation Failed " \
+        --msgbox "\n  archinstall exited with code $INSTALL_EXIT.\n\n  Open this in a browser on your network:\n\n    http://${LOCAL_IP}:${PORT}\n\n  Press OK — the server will keep running.\n  Press Ctrl+C in the terminal to stop it." 14 56
+
     echo ""
-    echo -e "${RED}╔══════════════════════════════════════════════╗${RST}"
-    echo -e "${RED}║   installation failed                        ║${RST}"
-    echo -e "${RED}╚══════════════════════════════════════════════╝${RST}"
+    echo -e "${BLD}${CYN}  http://${LOCAL_IP}:${PORT}${RST}"
     echo ""
-    echo -e "  Open this in a browser on your network:"
-    echo ""
-    echo -e "  ${BLD}${CYN}http://${LOCAL_IP}:${PORT}${RST}"
-    echo ""
-    echo -e "${DIM}  Press Ctrl+C to stop the server and exit.${RST}"
+    echo -e "  Press Ctrl+C to stop the server and exit."
     echo ""
 
     wait $SERVER_PID 2>/dev/null || true
@@ -514,21 +488,19 @@ fi
 
 ok "archinstall completed successfully!"
 
-# ── 7. Create btrfs subvolumes ────────────────────────────
+# ── 7. Create btrfs subvolumes ────────────────────────────────
 # archinstall 3.x has a bug with btrfs subvolume configs so we create
 # them here manually after the install, then update fstab accordingly.
-echo ""
-info "Creating btrfs subvolumes..."
+dialog --backtitle "$BT" \
+    --title " Post-Install " \
+    --infobox "\n  Creating btrfs subvolumes..." 5 38
 
-# Find the root block device archinstall used (the LUKS-mapped or raw partition)
 ROOT_DEV=$(findmnt -n -o SOURCE /mnt 2>/dev/null || true)
 
 if [[ -z "$ROOT_DEV" ]]; then
     warn "Could not detect mounted root device — skipping btrfs subvolumes."
     warn "Create them manually after reboot if needed."
 else
-    # archinstall already installed into the root of the btrfs fs.
-    # Strategy: snapshot current root as @, create siblings, update fstab.
     BTRFS_MNT=$(mktemp -d)
     mount -o subvolid=5 "$ROOT_DEV" "$BTRFS_MNT"
 
@@ -573,36 +545,26 @@ else
     } > /mnt/etc/fstab
 
     ok "btrfs subvolumes created and fstab updated"
-    echo -e "${DIM}     @            → /${RST}"
-    echo -e "${DIM}     @home        → /home${RST}"
-    echo -e "${DIM}     @snapshots   → /.snapshots${RST}"
-    echo -e "${DIM}     @var_log     → /var/log${RST}"
 fi
 
-# ── 8. Stage sumi for first boot ──────────────────────────
-echo ""
-info "Staging sumi for first boot..."
+# ── 8. Stage sumi for first boot ──────────────────────────────
+dialog --backtitle "$BT" \
+    --title " Post-Install " \
+    --infobox "\n  Staging sumi for first boot..." 5 40
 
-# archinstall mounts the new system at /mnt
 TARGET="/mnt"
 if [[ ! -d "$TARGET/home/$USERNAME" ]]; then
-    warn "Cannot find installed system at /mnt/home/$USERNAME"
-    warn "archinstall may have used a different mount point or the user wasn't created."
-    warn "You'll need to run install.sh manually after reboot."
-    warn "Steps:"
-    warn "  1. Reboot into the new system"
-    warn "  2. git clone <repo> ~/sumi"
-    warn "  3. cd ~/sumi && chmod +x install.sh && ./install.sh"
+    dialog --backtitle "$BT" \
+        --title " Warning " \
+        --msgbox "\n  Cannot find installed system at /mnt/home/$USERNAME\n\n  archinstall may have used a different mount point or\n  the user wasn't created.\n\n  After reboot, run manually:\n    git clone <repo> ~/sumi\n    cd ~/sumi && ./install.sh" 14 58
     exit 0
 fi
 
-# Copy sumi repo to the new user's home (use cp -rT to replace, not nest, on re-run)
+# Copy sumi repo to the new user's home
 SUMI_DEST="$TARGET/home/$USERNAME/sumi"
 rm -rf "$SUMI_DEST" 2>/dev/null || true
 cp -r "$SCRIPT_DIR" "$SUMI_DEST"
-# Fix ownership (archinstall creates the user, we need their UID)
 arch-chroot "$TARGET" chown -R "$USERNAME:$USERNAME" "/home/$USERNAME/sumi" 2>/dev/null || true
-ok "Copied sumi to /home/$USERNAME/sumi"
 
 # Create a first-boot script that runs install.sh automatically
 cat > "$TARGET/home/$USERNAME/.sumi-first-boot.sh" << 'FIRSTBOOT'
@@ -636,7 +598,7 @@ FIRSTBOOT
 chmod +x "$TARGET/home/$USERNAME/.sumi-first-boot.sh"
 arch-chroot "$TARGET" chown "$USERNAME:$USERNAME" "/home/$USERNAME/.sumi-first-boot.sh" 2>/dev/null || true
 
-# Add to .bash_profile so it runs on first TTY login (before zsh is default shell)
+# Add to .bash_profile so it runs on first TTY login
 BASH_PROFILE="$TARGET/home/$USERNAME/.bash_profile"
 if [[ ! -f "$BASH_PROFILE" ]] || ! grep -q "sumi-first-boot" "$BASH_PROFILE" 2>/dev/null; then
     cat >> "$BASH_PROFILE" << 'EOF'
@@ -646,35 +608,30 @@ if [[ ! -f "$BASH_PROFILE" ]] || ! grep -q "sumi-first-boot" "$BASH_PROFILE" 2>/
 EOF
     arch-chroot "$TARGET" chown "$USERNAME:$USERNAME" "/home/$USERNAME/.bash_profile" 2>/dev/null || true
 fi
-ok "First-boot hook installed"
 
-# ── 8. Done ───────────────────────────────────────────────
-echo ""
-echo -e "${DIM}╔══════════════════════════════════════════╗${RST}"
-echo -e "${GRN}║   sumi :: bootstrap complete             ║${RST}"
-echo -e "${DIM}╠══════════════════════════════════════════╣${RST}"
-echo -e "${DIM}║${RST}                                          ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  Arch Linux is installed. On first boot:  ${DIM}║${RST}"
-echo -e "${DIM}║${RST}                                          ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  1. Unlock LUKS (your encryption pass)   ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  2. Login at the TTY as ${BLD}$USERNAME${RST}          ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  3. sumi installs automatically          ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  4. Reboot again for greetd + plymouth   ${DIM}║${RST}"
-echo -e "${DIM}║${RST}                                          ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  After the second reboot, you'll get:    ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  • Plymouth TUI unlock → auto login      ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  • Full Hyprland desktop with theming    ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  • SUPER+X for control center            ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  • SUPER+/ for keybind cheatsheet        ${DIM}║${RST}"
-echo -e "${DIM}║${RST}                                          ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  If first-boot auto-install fails, run:  ${DIM}║${RST}"
-echo -e "${DIM}║${RST}  cd ~/sumi && ./install.sh               ${DIM}║${RST}"
-echo -e "${DIM}║${RST}                                          ${DIM}║${RST}"
-echo -e "${DIM}╚══════════════════════════════════════════╝${RST}"
-echo ""
-prompt "Reboot now? [Y/n] "
-read -r reboot_answer
-if [[ ! "$reboot_answer" =~ ^[Nn]$ ]]; then
+# ── 9. Done ────────────────────────────────────────────────────
+dialog --backtitle "$BT" \
+    --title " Bootstrap Complete " \
+    --msgbox "\
+  Arch Linux is installed successfully!
+
+  On first boot:
+    1. Unlock LUKS  (your encryption password)
+    2. Login as $USERNAME at the TTY
+    3. sumi installs automatically
+
+  On second reboot:
+    · Plymouth TUI unlock → auto login
+    · Full Hyprland desktop with theming
+    · SUPER+X for control center
+    · SUPER+/ for keybind cheatsheet
+
+  If first-boot auto-install fails:
+    cd ~/sumi && ./install.sh" 20 54
+
+dialog --backtitle "$BT" \
+    --title " Reboot " \
+    --yesno "\n  Reboot into your new system now?" 7 42 && {
     umount -R /mnt 2>/dev/null || true
     reboot
-fi
+}
