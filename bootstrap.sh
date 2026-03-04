@@ -96,20 +96,49 @@ fi
 # ── 1. Network ───────────────────────────────────────────────────
 s_section "Network"
 
+# Auto-bring up ethernet interfaces and request DHCP if no IP yet
+gum spin --title "  Bringing up ethernet..." -- bash -c '
+    for iface in $(ip -o link show | awk -F": " "{print \$2}" | grep -E "^en"); do
+        ip link set "$iface" up 2>/dev/null || true
+        # Only DHCP if no address yet
+        if ! ip -4 addr show "$iface" 2>/dev/null | grep -q "inet "; then
+            dhcpcd "$iface" --timeout 10 2>/dev/null &
+        fi
+    done
+    sleep 5
+' 2>/dev/null || true
+
 if ! gum spin --title "  Checking connectivity..." -- \
-    ping -c 1 -W 3 archlinux.org 2>/dev/null; then
+    ping -c 1 -W 5 archlinux.org 2>/dev/null; then
     s_warn "No internet connection detected."
     echo ""
-    gum style \
-        --border rounded --border-foreground '#f9e2af' --padding "0 2" \
-        "  station wlan0 scan" \
-        "  station wlan0 get-networks" \
-        "  station wlan0 connect <SSID>" \
-        "  exit"
-    echo ""
-    gum confirm "  Open iwctl now?" && { clear; iwctl || true; }
+    NET_CHOICE=$(gum choose \
+        --header "  How to connect?" \
+        "WiFi (iwctl)" \
+        "Ethernet — retry DHCP" \
+        "Skip (I'll connect manually)")
+    case "$NET_CHOICE" in
+        "WiFi (iwctl)")
+            gum style \
+                --border rounded --border-foreground '#f9e2af' --padding "0 2" \
+                "  station wlan0 scan" \
+                "  station wlan0 get-networks" \
+                "  station wlan0 connect <SSID>" \
+                "  exit"
+            echo ""
+            clear; iwctl || true
+            ;;
+        "Ethernet — retry DHCP")
+            gum spin --title "  Requesting DHCP on all ethernet interfaces..." -- bash -c '
+                for iface in $(ip -o link show | awk -F": " "{print \$2}" | grep -E "^en"); do
+                    ip link set "$iface" up 2>/dev/null || true
+                    dhcpcd "$iface" --timeout 15 2>/dev/null || true
+                done
+            ' || true
+            ;;
+    esac
     sleep 2
-    gum spin --title "  Rechecking..." -- ping -c 1 -W 3 archlinux.org || {
+    gum spin --title "  Rechecking..." -- ping -c 1 -W 5 archlinux.org || {
         s_fail "No internet. Connect manually and re-run."
         exit 1
     }
