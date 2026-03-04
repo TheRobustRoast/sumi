@@ -333,20 +333,75 @@ archinstall \
     --silent || INSTALL_EXIT=$?
 
 if [[ $INSTALL_EXIT -ne 0 ]]; then
-    err "archinstall failed with exit code $INSTALL_EXIT"
-    echo ""
     ARCHLOG="/var/log/archinstall/install.log"
-    if [[ -f "$ARCHLOG" ]]; then
-        info "Uploading install log for debugging..."
-        LOG_URL=$(curl -s -F "file=@${ARCHLOG}" https://0x0.st 2>/dev/null || echo "")
-        if [[ -n "$LOG_URL" ]]; then
-            echo -e "${CYN}   Log URL: ${BLD}${LOG_URL}${RST}"
-        else
-            warn "Upload failed. Log is at: $ARCHLOG"
-        fi
-    else
-        warn "No install log found at $ARCHLOG"
-    fi
+    PORT=7777
+
+    # Detect local IP (try global scope first, fall back to any)
+    LOCAL_IP=$(ip -4 addr show scope global \
+        | awk '/inet / {split($2,a,"/"); print a[1]; exit}' 2>/dev/null || true)
+    [[ -z "$LOCAL_IP" ]] && LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
+    [[ -z "$LOCAL_IP" ]] && LOCAL_IP="this-machine"
+
+    # Build a self-contained HTML error page from the install log
+    WEB_DIR=$(mktemp -d)
+    python3 - <<PYEOF
+import html, pathlib
+log_path = "$ARCHLOG"
+exit_code = "$INSTALL_EXIT"
+web_dir = "$WEB_DIR"
+try:
+    log = pathlib.Path(log_path).read_text(errors='replace')
+except Exception as e:
+    log = f"Log file not available ({e})"
+page = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>sumi :: install error</title>
+  <style>
+    * {{ box-sizing: border-box }}
+    body {{ background: #0f0f17; color: #cdd6f4; font-family: monospace;
+            padding: 2em; max-width: 1400px; margin: 0 auto }}
+    h1  {{ color: #f38ba8; margin: 0 0 .3em }}
+    .meta {{ color: #6c7086; font-size: .85em; margin-bottom: 2em }}
+    .meta span {{ color: #a6adc8 }}
+    pre {{ background: #1e1e2e; padding: 1.5em; border-radius: 8px;
+           overflow: auto; line-height: 1.6; font-size: .8em;
+           white-space: pre-wrap; word-break: break-all;
+           border: 1px solid #313244 }}
+  </style>
+</head>
+<body>
+  <h1>sumi :: archinstall failed</h1>
+  <p class="meta">exit code <span>{exit_code}</span> &nbsp;·&nbsp;
+     log <span>{log_path}</span></p>
+  <pre>{html.escape(log)}</pre>
+</body>
+</html>"""
+pathlib.Path(web_dir + "/index.html").write_text(page)
+PYEOF
+
+    # Start HTTP server in background
+    ( cd "$WEB_DIR" && python3 -m http.server $PORT ) &>/dev/null &
+    SERVER_PID=$!
+
+    # Replace EXIT trap so we clean up server + web dir on exit
+    trap "kill $SERVER_PID 2>/dev/null; rm -rf '$WEB_DIR'; rm -f '$PATCHED_CONF' '$PATCHED_CREDS'" EXIT
+
+    echo ""
+    echo -e "${RED}╔══════════════════════════════════════════════╗${RST}"
+    echo -e "${RED}║   installation failed                        ║${RST}"
+    echo -e "${RED}╚══════════════════════════════════════════════╝${RST}"
+    echo ""
+    echo -e "  Open this in a browser on your network:"
+    echo ""
+    echo -e "  ${BLD}${CYN}http://${LOCAL_IP}:${PORT}${RST}"
+    echo ""
+    echo -e "${DIM}  Press Ctrl+C to stop the server and exit.${RST}"
+    echo ""
+
+    wait $SERVER_PID 2>/dev/null || true
     exit 1
 fi
 
