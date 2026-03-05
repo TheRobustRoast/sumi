@@ -107,10 +107,20 @@ fun message_callback(text) {
 
 Plymouth.SetMessageFunction(message_callback);
 
-// ── Wrong password ──────────────────────────────────────────
+// ── Password accepted / normal state ────────────────────────
 fun display_normal_callback() {
     if (global.err_sprite)
         global.err_sprite.SetOpacity(0);
+
+    // After password entry, show "decrypting..." while LUKS unlocks
+    if (global.pw_title) {
+        global.pw_title.SetOpacity(0);
+        global.pw_input.SetOpacity(0);
+        global.pw_hint.SetOpacity(0);
+
+        img = make_text("decrypting...", dim.red, dim.green, dim.blue, font);
+        global.decrypt_sprite = center_sprite(img, screen_h / 2 - 10);
+    }
 }
 
 fun display_error_callback(text) {
