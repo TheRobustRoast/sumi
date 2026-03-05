@@ -1,6 +1,6 @@
 # sumi
 
-A TUI-first Hyprland rice for Arch Linux, optimized for the Framework 13 AMD (Ryzen 7840U). Every GUI app is replaced with a terminal equivalent launched inside foot. Colors are extracted from your wallpaper and applied system-wide. Everything has a boxy, monochrome aesthetic with a single accent color — zero border-radius anywhere.
+A TUI-first Hyprland rice for Arch Linux with hardware-agnostic support. Every GUI app is replaced with a terminal equivalent launched inside foot. Colors are extracted from your wallpaper and applied system-wide. Everything has a boxy, monochrome aesthetic with a single accent color — zero border-radius anywhere. Managed entirely through a Go CLI with Bubble Tea TUIs.
 
 ![Arch](https://img.shields.io/badge/Arch_Linux-1793D1?style=flat&logo=archlinux&logoColor=white)
 ![Hyprland](https://img.shields.io/badge/Hyprland-58E1FF?style=flat&logo=wayland&logoColor=black)
@@ -47,18 +47,18 @@ A TUI-first Hyprland rice for Arch Linux, optimized for the Framework 13 AMD (Ry
 
 ### One-command bootstrap (from Arch ISO)
 
-Boot the Arch live ISO on your Framework 13, connect to WiFi, then:
+Boot the Arch live ISO, connect to the internet, then:
 
 ```bash
-pacman -Sy git
+pacman -Sy git go
 git clone https://github.com/youruser/sumi /tmp/sumi
-cd /tmp/sumi
-./bootstrap.sh
+cd /tmp/sumi && go build -o sumi ./cmd/sumi
+./sumi bootstrap
 ```
 
-The bootstrap script walks you through everything interactively: connects to WiFi (launches iwctl if needed), detects your NVMe, collects your username, password, LUKS encryption passphrase, hostname, and timezone, patches the archinstall configs with your settings, runs archinstall, and stages the sumi post-install to run automatically on first login.
+The bootstrap TUI walks you through everything interactively: connects to WiFi (launches iwctl if needed), selects your disk, collects your username/password/hostname/timezone, then partitions with LUKS2 encryption, creates btrfs subvolumes, runs pacstrap, configures the system in chroot, and stages the rice installer for first login. On failure, an error page is served at `http://<your-ip>:7777`.
 
-After bootstrap finishes, it reboots into the new system. On first TTY login, `install.sh` runs automatically — installs yay, grabs AUR packages, deploys all config files, sets up greetd + Plymouth + systemd services, configures Framework 13 hardware, and changes your shell to zsh. Reboot once more for the full experience: Plymouth TUI LUKS unlock, greetd login, and the themed Hyprland desktop.
+After bootstrap finishes, reboot into the new system. On first TTY login, `sumi install` runs automatically — installs yay, grabs AUR packages, deploys all config files, sets up greetd + Plymouth + systemd services, applies hardware-specific tweaks, and changes your shell to zsh. Reboot once more for the full experience.
 
 ### Manual install (existing Arch system)
 
@@ -66,19 +66,27 @@ If you already have Arch + Hyprland installed:
 
 ```bash
 git clone https://github.com/youruser/sumi ~/sumi
-cd ~/sumi
-./install.sh
+cd ~/sumi && go build -o sumi ./cmd/sumi
+./sumi install
 ```
 
-The installer will: install yay if missing, install all packages via pacman and yay, back up existing configs before overwriting, deploy all config files, set up greetd + Plymouth + systemd user services, configure Framework 13 hardware (fingerprint, charge limit, AMD tuning), and change your default shell to zsh.
+### CLI commands
 
-Reboot when prompted. Drop wallpapers in `~/Pictures/Wallpapers/` — if the directory is empty on first boot, three starter gradient wallpapers are auto-generated.
+| Command | Description |
+|---------|-------------|
+| `sumi bootstrap` | Install Arch Linux from the live ISO |
+| `sumi install` | Install the sumi rice on an existing Arch system |
+| `sumi update` | Pull latest changes, rebuild, and re-install |
+| `sumi uninstall` | Remove the sumi rice and restore defaults |
+| `sumi theme` | Manage wallpaper and color theme |
+| `sumi config` | Edit settings interactively (~/.config/sumi/config.toml) |
+| `sumi doctor` | Check system health and configuration |
+| `sumi status` | Show current state (wallpaper, theme, hardware, services) |
 
-To remove everything cleanly:
+### Uninstall
 
 ```bash
-chmod +x uninstall.sh
-./uninstall.sh
+sumi uninstall
 ```
 
 ## Wallpaper theming
@@ -210,75 +218,55 @@ The zsh config includes dev-focused functions:
 
 ```
 sumi/
-├── archinstall/          # archinstall profiles (LUKS + Hyprland)
+├── cmd/sumi/             # CLI entry point (cobra subcommands)
+├── internal/
+│   ├── bootstrap/        # Arch ISO installation logic
+│   ├── config/           # TOML config (~/.config/sumi/config.toml)
+│   ├── hardware/         # Hardware detection + profiles
+│   ├── model/            # Shared types (Step, InstallCtx)
+│   ├── runner/           # Subprocess streaming (Stream, RunCmd)
+│   ├── steps/            # Install/doctor/uninstall step implementations
+│   ├── theme/            # Monochrome palette + lipgloss styles
+│   └── ui/               # Bubble Tea TUIs (installer, steprunner, bootstrap, config, theme, status)
 ├── btop/                 # btop config + sumi theme
 ├── cava/                 # audio visualizer config
 ├── dunst/                # notification daemon
 ├── foot/                 # terminal emulator
 ├── greetd/               # login manager (tuigreet)
-├── gtk-3.0/              # GTK3 dark mode + cursor
-├── gtk-4.0/              # GTK4 dark mode + cursor
-├── hypr/
-│   ├── hyprland.conf     # main config (sources conf.d/)
-│   ├── hyprlock.conf     # lockscreen (fingerprint + battery)
-│   ├── hypridle.conf     # idle management
-│   ├── hyprpaper.conf    # wallpaper
-│   └── conf.d/
-│       ├── autostart.conf
-│       ├── colors.conf   # wallust-generated colors
-│       ├── env.conf      # environment variables
-│       ├── keybinds.conf # all keybinds
-│       └── rules.conf    # window rules
-├── icons/                # cursor theme index
-├── lazygit/              # lazygit config
+├── hypr/                 # Hyprland config (sources conf.d/)
 ├── nvim/                 # neovim config (lazy.nvim + LSP)
 ├── plymouth/             # TUI boot theme for LUKS
-├── scripts/              # 27 shell scripts
-│   ├── control-center.sh
-│   ├── project-launcher.sh
-│   ├── git-worktree.sh
-│   ├── wallpaper-*.sh
-│   ├── screenshot.sh
-│   ├── screen-record.sh
-│   └── ...
-├── starship/             # prompt config
-├── systemd/user/         # 6 user services + timers
-├── tmux/                 # tmux config
-├── wallust/              # wallust config + 8 color templates
+├── scripts/              # shell scripts called by keybinds
+├── systemd/user/         # user services + timers
+├── wallust/              # color extraction config + templates
 ├── waybar/               # bar config + style
-├── fuzzel/               # launcher config
-├── xdg/                  # mime associations + portal config
-├── yazi/                 # file manager config + theme
 ├── zsh/                  # .zshrc with TUI aliases + dev functions
-├── install.sh            # full bootstrap installer
-└── uninstall.sh          # clean removal
+└── Makefile              # build, static, install targets
 ```
 
-## Framework 13 AMD specifics
+## Hardware profiles
 
-The rice is tuned for the Framework Laptop 13 with Ryzen 7840U:
+sumi auto-detects your hardware via DMI sysfs and applies the correct profile. Override with `sumi config` or set `hardware.profile` in `~/.config/sumi/config.toml`.
 
-- **Power:** power-profiles-daemon (not TLP — better for AMD 7040 series), amd_pstate=active
-- **Display:** Scaled for 2880x1920 (2.8K), XWayland apps get 2x scaling
-- **GPU:** RDNA3 iGPU optimizations — direct scanout, explicit sync, hardware cursors, reduced blur on fullscreen, tearing rules for gaming
-- **Battery:** Charge capped at 80% via framework-laptop-kmod for longevity
-- **Fingerprint:** fprintd enrolled and used on hyprlock
-- **Sleep:** rtc_cmos.use_acpi_alarm=1 for reliable s2idle
-- **Firmware:** fwupd enabled for LVFS firmware updates
+| Profile | Detection | Extras |
+|---------|-----------|--------|
+| Framework 13 AMD | DMI vendor match | framework-laptop-kmod, battery charge limit, amd_pstate, RDNA3 tweaks, fingerprint |
+| Generic Laptop | Battery present | power-profiles-daemon, brightnessctl |
+| Generic Desktop | No battery | Minimal, no power management |
 
 ## Dependencies
 
-Installed automatically by `install.sh`:
+Installed automatically by `sumi install` and `sumi bootstrap`:
 
 **Core:** hyprland, foot, waybar, fuzzel, dunst, hyprlock, hypridle, hyprpaper, hyprpicker, greetd, tuigreet, plymouth
 
-**TUI apps:** yazi, lazygit, btop, cava, impala, bluetuith, pulsemixer, ncdu, bandwhich, procs
+**TUI apps:** yazi, lazygit, btop, cava, pulsemixer, ncdu, procs
 
-**CLI tools:** fzf, jq, eza, bat, dust, duf, fd, ripgrep, doggo, zoxide, starship, direnv, wl-clipboard, cliphist, slurp, grim, wtype, playerctl, brightnessctl
+**CLI tools:** fzf, jq, eza, bat, dust, duf, fd, ripgrep, zoxide, starship, wl-clipboard, cliphist, slurp, grim, wtype, playerctl, brightnessctl
 
-**Dev:** neovim, tmux, zsh, zsh-autosuggestions, zsh-syntax-highlighting, nodejs, npm, python, shellcheck, shfmt, docker, lsof
+**Dev:** neovim, zsh, zsh-autosuggestions, zsh-syntax-highlighting, go
 
-**Framework:** framework-laptop-kmod-dkms-git, fprintd, fwupd, power-profiles-daemon
+**Hardware-specific:** Installed per profile (e.g. framework-laptop-kmod-dkms-git, fprintd, fwupd for Framework 13)
 
 **Theming:** wallust, bibata-cursor-theme, JetBrainsMono Nerd Font
 

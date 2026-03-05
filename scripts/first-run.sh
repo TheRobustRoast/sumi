@@ -42,7 +42,7 @@ else
         exit 0
     fi
     # Apply the solid wallpaper
-    "$SCRIPTS/wallpaper-apply.sh" "$WALL_DIR/default.png" 2>/dev/null
+    sumi wallpaper apply "$WALL_DIR/default.png" 2>/dev/null
     touch "$FIRST_RUN_FLAG"
     exit 0
 fi
@@ -68,15 +68,14 @@ $CONVERT -size 2880x1920 \
 
 # Validate and apply the first wallpaper
 if [[ -f "$WALL_DIR/sumi-dark-blue.png" ]]; then
-    "$SCRIPTS/wallpaper-apply.sh" "$WALL_DIR/sumi-dark-blue.png" 2>/dev/null
+    sumi wallpaper apply "$WALL_DIR/sumi-dark-blue.png" 2>/dev/null
     touch "$FIRST_RUN_FLAG"
 elif [[ -f "$WALL_DIR/sumi-monochrome.png" ]]; then
-    # Fallback if dark-blue failed
-    "$SCRIPTS/wallpaper-apply.sh" "$WALL_DIR/sumi-monochrome.png" 2>/dev/null
+    sumi wallpaper apply "$WALL_DIR/sumi-monochrome.png" 2>/dev/null
     touch "$FIRST_RUN_FLAG"
 else
     notify-send -a sumi -u critical -t 0 "[ sumi ]" \
-        "Wallpaper generation failed.\nDrop images in ~/Pictures/Wallpapers/ and run:\n  wallpaper-apply.sh <path>"
+        "Wallpaper generation failed.\nDrop images in ~/Pictures/Wallpapers/ and run:\n  sumi wallpaper apply <path>"
     touch "$FIRST_RUN_FLAG"
 fi
 

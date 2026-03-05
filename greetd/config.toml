@@ -6,5 +6,5 @@
 vt = 1
 
 [default_session]
-command = "tuigreet --time --time-format '%Y-%m-%d %H:%M' --greeting '╔══════════════════════════════════╗\n║     framework :: sumi login   ║\n╚══════════════════════════════════╝' --remember --remember-session --asterisks --cmd '$HOME/.config/hypr/scripts/hyprland-wrapped.sh' --theme 'border=darkgray;text=white;prompt=cyan;time=darkgray;action=darkgray;button=cyan;container=default;input=white'"
+command = "tuigreet --time --time-format '%Y-%m-%d %H:%M' --greeting '╔══════════════════════════════════╗\n║     framework :: sumi login   ║\n╚══════════════════════════════════╝' --remember --remember-session --asterisks --cmd 'sumi wrap hyprland' --theme 'border=darkgray;text=white;prompt=cyan;time=darkgray;action=darkgray;button=cyan;container=default;input=white'"
 user = "greeter"

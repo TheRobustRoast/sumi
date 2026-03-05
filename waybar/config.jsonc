@@ -43,8 +43,8 @@
 
     "custom/logo": {
         "format": " [hypr] ",
-        "on-click": "foot -T control-center -e ~/.config/hypr/scripts/control-center.sh",
-        "on-click-right": "foot -T keybinds -e ~/.config/hypr/scripts/keybinds-cheatsheet.sh",
+        "on-click": "foot -T control-center -e sumi control",
+        "on-click-right": "foot -T keybinds -e sumi keys",
         "tooltip-format": "Left: control center | Right: keybinds"
     },
 
@@ -55,8 +55,8 @@
 
     "custom/wallpaper": {
         "format": " [wp] ",
-        "on-click": "~/.config/hypr/scripts/wallpaper-select.sh",
-        "on-click-right": "~/.config/hypr/scripts/wallpaper-random.sh",
+        "on-click": "foot -T theme -e sumi theme",
+        "on-click-right": "sumi wallpaper random",
         "tooltip-format": "Left: pick wallpaper | Right: random"
     },
 
@@ -133,19 +133,19 @@
     },
 
     "custom/power-profile": {
-        "exec": "~/.config/hypr/scripts/power-profile.sh waybar",
+        "exec": "sumi power profile --waybar",
         "return-type": "json",
         "interval": 5,
-        "on-click": "~/.config/hypr/scripts/power-profile.sh toggle",
+        "on-click": "sumi power profile",
         "tooltip": true
     },
 
     "custom/framework-battery": {
-        "exec": "~/.config/hypr/scripts/framework-battery.sh waybar",
+        "exec": "sumi power battery --waybar",
         "return-type": "json",
         "interval": 5,
-        "on-click": "~/.config/hypr/scripts/framework-battery.sh set-limit 80",
-        "on-click-right": "~/.config/hypr/scripts/framework-battery.sh set-limit 100",
+        "on-click": "sumi power battery --limit 80",
+        "on-click-right": "sumi power battery --limit 100",
         "tooltip": true
     },
 
@@ -178,18 +178,18 @@
     },
 
     "custom/gaming-mode": {
-        "exec": "if [ -f $HOME/.cache/sumi/gaming-mode ] && [ \"$(cat $HOME/.cache/sumi/gaming-mode)\" = 'on' ]; then echo '{\"text\": \"[GAME]\", \"class\": \"active\"}'; else echo '{\"text\": \"\", \"class\": \"\"}'; fi",
+        "exec": "sumi mode gaming-status",
         "return-type": "json",
         "interval": 3,
-        "on-click": "~/.config/hypr/scripts/gaming-mode.sh",
+        "on-click": "sumi mode gaming",
         "tooltip": false
     },
 
     "custom/focus-mode": {
-        "exec": "if [ -f $HOME/.cache/sumi/focus-mode ] && [ \"$(cat $HOME/.cache/sumi/focus-mode)\" = 'on' ]; then echo '{\"text\": \"[DND]\", \"class\": \"active\"}'; else echo '{\"text\": \"\", \"class\": \"\"}'; fi",
+        "exec": "sumi mode focus-status",
         "return-type": "json",
         "interval": 3,
-        "on-click": "~/.config/hypr/scripts/focus-mode.sh",
+        "on-click": "sumi mode focus",
         "tooltip": false
     },
 
@@ -206,10 +206,10 @@
     },
 
     "custom/recording": {
-        "exec": "if [ -f /tmp/sumi-recording.pid ] && kill -0 $(cat /tmp/sumi-recording.pid) 2>/dev/null; then echo '{\"text\": \"● REC\", \"class\": \"recording\"}'; else echo '{\"text\": \"\", \"class\": \"\"}'; fi",
+        "exec": "sumi capture record --status",
         "return-type": "json",
         "interval": 2,
-        "on-click": "~/.config/hypr/scripts/screen-record.sh area",
+        "on-click": "sumi capture record",
         "tooltip": false
     }
 }

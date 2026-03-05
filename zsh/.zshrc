@@ -128,10 +128,10 @@ alias files='yazi'
 alias music='cava'
 alias disk='ncdu'
 alias sysmon='btop'
-alias power='~/.config/hypr/scripts/power-profile.sh toggle'
-alias wall='~/.config/hypr/scripts/wallpaper-select.sh'
-alias wallr='~/.config/hypr/scripts/wallpaper-random.sh'
-alias cc='~/.config/hypr/scripts/control-center.sh'
+alias power='sumi power profile'
+alias wall='sumi wallpaper pick'
+alias wallr='sumi wallpaper random'
+alias cc='sumi control'
 
 # ── Quick edits ──────────────────────────────────────────────
 alias hc='nvim ~/.config/hypr/hyprland.conf'
@@ -199,13 +199,13 @@ alias rm='rm -I'
 alias cp='cp -iv'
 alias mv='mv -iv'
 
-# ── Quick sumi scripts ────────────────────────────────────
-alias dotsync='~/.config/hypr/scripts/dotfile-sync.sh'
-alias note='~/.config/hypr/scripts/scratch-note.sh'
-alias hotplug='~/.config/hypr/scripts/monitor-hotplug.sh'
-alias gamemode='~/.config/hypr/scripts/gaming-mode.sh'
-alias focusmode='~/.config/hypr/scripts/focus-mode.sh'
-alias cleanup='~/.config/hypr/scripts/cleanup.sh'
+# ── Quick sumi aliases ────────────────────────────────────
+alias dotsync='sumi sync'
+alias note='sumi note'
+alias hotplug='sumi monitor detect'
+alias gamemode='sumi mode gaming'
+alias focusmode='sumi mode focus'
+alias cleanup='sumi cleanup'
 
 # ── Dev functions ────────────────────────────────────────────
 
@@ -301,12 +301,12 @@ envs() {
 
 # Tmux session launcher for projects
 proj() {
-    ~/.config/hypr/scripts/project-launcher.sh
+    sumi project
 }
 
 # Git worktree manager
 wt() {
-    ~/.config/hypr/scripts/git-worktree.sh
+    sumi worktree
 }
 
 # Man page with fzf search
@@ -332,49 +332,8 @@ if command -v tmux &>/dev/null && [[ -z "$TMUX" && -n "$PS1" && "$TERM_PROGRAM" 
     fi
 fi
 
-# ── sumi CLI — unified access to all rice scripts ──────────
-sumi() {
-    local scripts="$HOME/.config/hypr/scripts"
-    case "${1:-}" in
-        wall)     "$scripts/wallpaper-select.sh" ;;
-        wallr)    "$scripts/wallpaper-random.sh" ;;
-        theme)    "$scripts/theme-toggle.sh" ;;
-        game)     "$scripts/gaming-mode.sh" ;;
-        focus)    "$scripts/focus-mode.sh" ;;
-        clean)    "$scripts/cleanup.sh" ;;
-        dots)     "$scripts/dotfile-sync.sh" ;;
-        note)     "$scripts/scratch-note.sh" ;;
-        keys)     "$scripts/keybinds-cheatsheet.sh" ;;
-        session)  "$scripts/session-save.sh" "${@:2}" ;;
-        hotplug)  "$scripts/monitor-hotplug.sh" ;;
-        power)    "$scripts/power-profile.sh" "${2:-toggle}" ;;
-        bat)      "$scripts/framework-battery.sh" "${@:2}" ;;
-        *)
-            echo "sumi — rice management CLI"
-            echo ""
-            echo "  wall      pick wallpaper"
-            echo "  wallr     random wallpaper"
-            echo "  theme     toggle dark/light"
-            echo "  game      toggle gaming mode"
-            echo "  focus     toggle focus/DND"
-            echo "  clean     run cleanup"
-            echo "  dots      dotfile backup/restore"
-            echo "  note      quick notes"
-            echo "  keys      keybind cheatsheet"
-            echo "  session   save/restore layouts"
-            echo "  hotplug   detect monitors"
-            echo "  power     toggle power profile"
-            echo "  bat       battery management"
-            ;;
-    esac
-}
-
-# Tab completion for sumi subcommands
-_sumi() {
-    local -a cmds=(wall wallr theme game focus clean dots note keys session hotplug power bat)
-    _describe 'sumi commands' cmds
-}
-compdef _sumi sumi
+# ── sumi CLI is a Go binary at ~/.local/bin/sumi ──────────
+# Shell aliases above provide shortcuts; run `sumi --help` for all commands.
 
 # ── Create cache dirs ────────────────────────────────────────
 [[ -d "$HOME/.cache/zsh" ]] || mkdir -p "$HOME/.cache/zsh"

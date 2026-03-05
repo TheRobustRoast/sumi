@@ -4,7 +4,7 @@ After=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/bash -c 'inotifywait -m -e close_write "$HOME/.cache/sumi/current-wallpaper" | while read; do ~/.config/hypr/scripts/wallpaper-apply.sh "$(cat $HOME/.cache/sumi/current-wallpaper)"; done'
+ExecStart=/usr/bin/bash -c 'inotifywait -m -e close_write "$HOME/.cache/sumi/current-wallpaper" | while read; do sumi wallpaper apply "$(cat $HOME/.cache/sumi/current-wallpaper)"; done'
 Restart=on-failure
 RestartSec=3
 

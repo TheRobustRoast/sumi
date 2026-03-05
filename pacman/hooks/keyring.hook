@@ -1,10 +1,9 @@
 [Trigger]
-Operation = Install
 Operation = Upgrade
 Type = Package
 Target = archlinux-keyring
 
 [Action]
-Description = Populating Arch Linux keyring...
-When = PostTransaction
+Description = Refreshing Arch Linux keyring...
+When = PreTransaction
 Exec = /usr/bin/pacman-key --populate archlinux

@@ -2,11 +2,9 @@
   "permissions": {
     "allow": [
       "WebFetch(domain:*)",
-
       "Bash(curl *)",
       "Bash(wget *)",
       "Bash(git *)",
-
       "Bash(ls *)",
       "Bash(cat *)",
       "Bash(find *)",
@@ -17,7 +15,6 @@
       "Bash(diff *)",
       "Bash(head *)",
       "Bash(tail *)",
-
       "Bash(cp *)",
       "Bash(mv *)",
       "Bash(mkdir *)",
@@ -26,7 +23,6 @@
       "Bash(chown *)",
       "Bash(ln *)",
       "Bash(rsync *)",
-
       "Bash(make *)",
       "Bash(cmake *)",
       "Bash(meson *)",
@@ -38,7 +34,6 @@
       "Bash(python3 *)",
       "Bash(bash *)",
       "Bash(sh *)",
-
       "Bash(pacman *)",
       "Bash(yay *)",
       "Bash(paru *)",
@@ -47,7 +42,6 @@
       "Bash(dpkg *)",
       "Bash(rpm *)",
       "Bash(dnf *)",
-
       "Bash(systemctl *)",
       "Bash(journalctl *)",
       "Bash(uname *)",
@@ -58,17 +52,14 @@
       "Bash(dmesg *)",
       "Bash(mount *)",
       "Bash(umount *)",
-
       "Bash(hyprctl *)",
       "Bash(wayctl *)",
       "Bash(wlr-randr *)",
-
       "Bash(tar *)",
       "Bash(gzip *)",
       "Bash(unzip *)",
       "Bash(xz *)",
       "Bash(zstd *)",
-
       "Bash(sed *)",
       "Bash(awk *)",
       "Bash(sort *)",
@@ -77,10 +68,30 @@
       "Bash(tee *)",
       "Bash(echo *)",
       "Bash(printf *)",
-
       "Bash(jq *)",
       "Bash(yq *)",
-      "Bash(envsubst *)"
+      "Bash(envsubst *)",
+      "Bash(c:/Users/micro/Projects/hyprland-rice/pacman/hooks/keyring.hook:*)",
+      "Bash(c:/Users/micro/Projects/hyprland-rice/go.mod:*)",
+      "Bash(c:/Users/micro/Projects/hyprland-rice/Makefile:*)",
+      "Bash(c:/Users/micro/Projects/hyprland-rice/internal/theme/colors.go:*)",
+      "Bash(c:/Users/micro/Projects/hyprland-rice/internal/theme/styles.go:*)",
+      "Bash(go build:*)",
+      "Bash(go mod:*)",
+      "Bash(go vet:*)",
+      "Bash(./sumi.exe:*)",
+      "Bash(go get:*)",
+      "Bash(rm:*)",
+      "Bash(go test:*)",
+      "Bash(./sumi:*)",
+      "Bash(go install:*)",
+      "Bash(govulncheck:*)",
+      "Bash(gosec:*)",
+      "Bash(do:*)",
+      "Bash(/tmp/test_signal.sh:*)",
+      "Bash(/tmp/test_shuf.sh:*)",
+      "Bash(go doc:*)",
+      "Bash(done)"
     ]
   }
 }
