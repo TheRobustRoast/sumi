@@ -77,20 +77,20 @@ if [[ -d "$HOME/sumi" ]]; then
     echo "sumi :: first boot setup"
     echo ""
     cd "$HOME/sumi"
-    if command -v sumi &>/dev/null; then
-        sumi install
-    else
-        go build -o sumi ./cmd/sumi && ./sumi install
-    fi
+    ./sumi install
     if [[ $? -eq 0 ]]; then
+        # Install binary to PATH
+        install -Dm755 sumi "$HOME/.local/bin/sumi"
         touch "$MARKER"
         rm -f "$HOME/.sumi-first-boot.sh"
+        # Clean up the bash_profile hook
+        sed -i '/sumi-first-boot/d' "$HOME/.bash_profile"
         echo ""
         echo "sumi installed! Reboot for the full experience."
     else
         echo ""
         echo "Install failed. Retry on next login, or:"
-        echo "  cd ~/sumi && sumi install"
+        echo "  cd ~/sumi && ./sumi install"
     fi
 fi
 `
