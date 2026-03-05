@@ -27,4 +27,6 @@ nvim/plugin/
 wallpapers/
 
 .claude/settings.local.json
-.claude/settings.local.json
+
+# Windows dev binary (don't commit)
+sumi.exe

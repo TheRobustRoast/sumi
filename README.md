@@ -50,11 +50,12 @@ A TUI-first Hyprland rice for Arch Linux with hardware-agnostic support. Every G
 Boot the Arch live ISO, connect to the internet, then:
 
 ```bash
-pacman -Sy git go
+pacman -Sy git
 git clone https://github.com/TheRobustRoast/sumi /tmp/sumi
-cd /tmp/sumi && CGO_ENABLED=0 go build -o sumi ./cmd/sumi
-./sumi bootstrap
+cd /tmp/sumi && ./sumi bootstrap
 ```
+
+A pre-built static binary is included in the repo — no Go needed on the ISO.
 
 The bootstrap TUI walks you through everything interactively: connects to WiFi (launches iwctl if needed), selects your disk, collects your username/password/hostname/timezone, then partitions with LUKS2 encryption, creates btrfs subvolumes, runs pacstrap, configures the system in chroot, and stages the rice installer for first login. On failure, a debug page is available at `http://<your-ip>:7777` so you can view the full log from another device.
 
