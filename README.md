@@ -51,12 +51,12 @@ Boot the Arch live ISO, connect to the internet, then:
 
 ```bash
 pacman -Sy git go
-git clone https://github.com/youruser/sumi /tmp/sumi
-cd /tmp/sumi && go build -o sumi ./cmd/sumi
+git clone https://github.com/TheRobustRoast/sumi /tmp/sumi
+cd /tmp/sumi && CGO_ENABLED=0 go build -o sumi ./cmd/sumi
 ./sumi bootstrap
 ```
 
-The bootstrap TUI walks you through everything interactively: connects to WiFi (launches iwctl if needed), selects your disk, collects your username/password/hostname/timezone, then partitions with LUKS2 encryption, creates btrfs subvolumes, runs pacstrap, configures the system in chroot, and stages the rice installer for first login. On failure, an error page is served at `http://<your-ip>:7777`.
+The bootstrap TUI walks you through everything interactively: connects to WiFi (launches iwctl if needed), selects your disk, collects your username/password/hostname/timezone, then partitions with LUKS2 encryption, creates btrfs subvolumes, runs pacstrap, configures the system in chroot, and stages the rice installer for first login. On failure, a debug page is available at `http://<your-ip>:7777` so you can view the full log from another device.
 
 After bootstrap finishes, reboot into the new system. On first TTY login, `sumi install` runs automatically — installs yay, grabs AUR packages, deploys all config files, sets up greetd + Plymouth + systemd services, applies hardware-specific tweaks, and changes your shell to zsh. Reboot once more for the full experience.
 
@@ -65,7 +65,7 @@ After bootstrap finishes, reboot into the new system. On first TTY login, `sumi 
 If you already have Arch + Hyprland installed:
 
 ```bash
-git clone https://github.com/youruser/sumi ~/sumi
+git clone https://github.com/TheRobustRoast/sumi ~/sumi
 cd ~/sumi && go build -o sumi ./cmd/sumi
 ./sumi install
 ```

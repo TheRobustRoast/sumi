@@ -63,7 +63,7 @@ zle -N zle-line-init
 # ── Completion ───────────────────────────────────────────────
 autoload -Uz compinit
 # Only regenerate compinit cache once per day (faster startup)
-if [[ -n ${ZDOTDIR}/.zcompdump(#qN.mh+24) ]]; then
+if [[ -n ~/.zcompdump(#qN.mh+24) ]]; then
     compinit
 else
     compinit -C
