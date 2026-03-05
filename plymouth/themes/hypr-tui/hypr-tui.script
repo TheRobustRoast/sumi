@@ -2,11 +2,11 @@
 // Minimal LUKS unlock + boot progress
 
 // ── Colors ──────────────────────────────────────────────────
-bg.red   = 0.04; bg.green  = 0.04; bg.blue  = 0.04;  // #0a0a0a
-fg.red   = 0.78; fg.green  = 0.78; fg.blue  = 0.78;  // #c8c8c8
-accent.red  = 0.48; accent.green = 0.63; accent.blue = 0.97;  // #7aa2f7
-dim.red  = 0.23; dim.green = 0.23; dim.blue = 0.23;  // #3a3a3a
-err.red  = 0.97; err.green = 0.47; err.blue = 0.56;  // #f7768e
+bg.red   = 0.04; bg.green  = 0.04; bg.blue  = 0.04;
+fg.red   = 0.78; fg.green  = 0.78; fg.blue  = 0.78;
+accent.red  = 0.48; accent.green = 0.63; accent.blue = 0.97;
+dim.red  = 0.23; dim.green = 0.23; dim.blue = 0.23;
+err.red  = 0.97; err.green = 0.47; err.blue = 0.56;
 
 // ── Background ──────────────────────────────────────────────
 Window.SetBackgroundTopColor(bg.red, bg.green, bg.blue);
@@ -15,18 +15,16 @@ Window.SetBackgroundBottomColor(bg.red, bg.green, bg.blue);
 screen_w = Window.GetWidth();
 screen_h = Window.GetHeight();
 
+// ── Font ────────────────────────────────────────────────────
+font = "Mono 14";
+font_lg = "Mono 18";
+
 // ── Helpers ─────────────────────────────────────────────────
-fun txt(text, x, y, r, g, b) {
-    img = Image.Text(text, r, g, b);
-    s = Sprite(img);
-    s.SetX(x);
-    s.SetY(y);
-    s.SetZ(10);
-    return s;
+fun make_text(text, r, g, b, f) {
+    return Image.Text(text, r, g, b, 1, f);
 }
 
-fun center_txt(text, y, r, g, b) {
-    img = Image.Text(text, r, g, b);
+fun center_sprite(img, y) {
     s = Sprite(img);
     s.SetX(screen_w / 2 - img.GetWidth() / 2);
     s.SetY(y);
@@ -36,10 +34,11 @@ fun center_txt(text, y, r, g, b) {
 
 // ── Boot title ──────────────────────────────────────────────
 title_y = screen_h / 2 - 60;
-center_txt("sumi", title_y, accent.red, accent.green, accent.blue);
+title_img = make_text("sumi", accent.red, accent.green, accent.blue, font_lg);
+center_sprite(title_img, title_y);
 
 // ── Boot progress ───────────────────────────────────────────
-bar_y = title_y + 40;
+bar_y = title_y + 50;
 
 fun boot_progress_callback(duration, progress) {
     filled = Math.Int(progress * 30);
@@ -52,12 +51,12 @@ fun boot_progress_callback(duration, progress) {
     }
     bar = "[" + bar + "] " + Math.Int(progress * 100) + "%";
 
+    img = make_text(bar, dim.red, dim.green, dim.blue, font);
     if (global.bar_sprite) {
-        img = Image.Text(bar, dim.red, dim.green, dim.blue);
         global.bar_sprite.SetImage(img);
         global.bar_sprite.SetX(screen_w / 2 - img.GetWidth() / 2);
     } else {
-        global.bar_sprite = center_txt(bar, bar_y, dim.red, dim.green, dim.blue);
+        global.bar_sprite = center_sprite(img, bar_y);
     }
 }
 
@@ -65,20 +64,16 @@ Plymouth.SetBootProgressFunction(boot_progress_callback);
 
 // ── LUKS password prompt ────────────────────────────────────
 fun display_password_callback(prompt, bullet_count) {
-    // Clear previous sprites
     if (global.pw_title)   global.pw_title.SetOpacity(0);
     if (global.pw_input)   global.pw_input.SetOpacity(0);
     if (global.pw_hint)    global.pw_hint.SetOpacity(0);
-
-    // Hide boot title and progress during password entry
     if (global.bar_sprite) global.bar_sprite.SetOpacity(0);
 
     py = screen_h / 2 - 40;
 
-    // Title
-    global.pw_title = center_txt("unlock disk", py, accent.red, accent.green, accent.blue);
+    img_title = make_text("unlock disk", accent.red, accent.green, accent.blue, font_lg);
+    global.pw_title = center_sprite(img_title, py);
 
-    // Bullet field
     dots = "";
     for (i = 0; i < bullet_count; i++)
         dots += "*";
@@ -88,10 +83,11 @@ fun display_password_callback(prompt, bullet_count) {
     else
         prompt_text = "> ";
 
-    global.pw_input = center_txt(prompt_text, py + 30, fg.red, fg.green, fg.blue);
+    img_input = make_text(prompt_text, fg.red, fg.green, fg.blue, font);
+    global.pw_input = center_sprite(img_input, py + 40);
 
-    // Hint
-    global.pw_hint = center_txt("enter passphrase", py + 60, dim.red, dim.green, dim.blue);
+    img_hint = make_text("enter passphrase", dim.red, dim.green, dim.blue, font);
+    global.pw_hint = center_sprite(img_hint, py + 70);
 }
 
 Plymouth.SetDisplayPasswordFunction(display_password_callback);
@@ -100,12 +96,12 @@ Plymouth.SetDisplayPasswordFunction(display_password_callback);
 msg_y = screen_h / 2 + 80;
 
 fun message_callback(text) {
+    img = make_text(text, dim.red, dim.green, dim.blue, font);
     if (global.msg_sprite) {
-        img = Image.Text(text, dim.red, dim.green, dim.blue);
         global.msg_sprite.SetImage(img);
         global.msg_sprite.SetX(screen_w / 2 - img.GetWidth() / 2);
     } else {
-        global.msg_sprite = center_txt(text, msg_y, dim.red, dim.green, dim.blue);
+        global.msg_sprite = center_sprite(img, msg_y);
     }
 }
 
@@ -113,19 +109,18 @@ Plymouth.SetMessageFunction(message_callback);
 
 // ── Wrong password ──────────────────────────────────────────
 fun display_normal_callback() {
-    // Clear error message on retry
     if (global.err_sprite)
         global.err_sprite.SetOpacity(0);
 }
 
 fun display_error_callback(text) {
     err_y = screen_h / 2 + 60;
+    img = make_text(text, err.red, err.green, err.blue, font);
     if (global.err_sprite) {
-        img = Image.Text(text, err.red, err.green, err.blue);
         global.err_sprite.SetImage(img);
         global.err_sprite.SetX(screen_w / 2 - img.GetWidth() / 2);
     } else {
-        global.err_sprite = center_txt(text, err_y, err.red, err.green, err.blue);
+        global.err_sprite = center_sprite(img, err_y);
     }
 }
 
