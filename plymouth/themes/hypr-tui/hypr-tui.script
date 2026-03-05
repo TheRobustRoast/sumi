@@ -1,146 +1,138 @@
-// ╔══════════════════════════════════════════════════════════════╗
-// ║  Plymouth Script — Hypr TUI Boot / LUKS Unlock              ║
-// ║  Boxy monochrome terminal aesthetic                         ║
-// ╚══════════════════════════════════════════════════════════════╝
+// sumi :: plymouth theme
+// Minimal LUKS unlock + boot progress
 
 // ── Colors ──────────────────────────────────────────────────
-bg_color.red   = 0.04; bg_color.green  = 0.04; bg_color.blue  = 0.04;  // #0a0a0a
-fg_color.red   = 0.78; fg_color.green  = 0.78; fg_color.blue  = 0.78;  // #c8c8c8
-acc_color.red  = 0.48; acc_color.green = 0.63; acc_color.blue = 0.97;  // #7aa2f7
-dim_color.red  = 0.23; dim_color.green = 0.23; dim_color.blue = 0.23;  // #3a3a3a
-err_color.red  = 0.97; err_color.green = 0.47; err_color.blue = 0.56;  // #f7768e
+bg.red   = 0.04; bg.green  = 0.04; bg.blue  = 0.04;  // #0a0a0a
+fg.red   = 0.78; fg.green  = 0.78; fg.blue  = 0.78;  // #c8c8c8
+accent.red  = 0.48; accent.green = 0.63; accent.blue = 0.97;  // #7aa2f7
+dim.red  = 0.23; dim.green = 0.23; dim.blue = 0.23;  // #3a3a3a
+err.red  = 0.97; err.green = 0.47; err.blue = 0.56;  // #f7768e
 
-// ── Window ──────────────────────────────────────────────────
-Window.SetBackgroundTopColor(bg_color.red, bg_color.green, bg_color.blue);
-Window.SetBackgroundBottomColor(bg_color.red, bg_color.green, bg_color.blue);
+// ── Background ──────────────────────────────────────────────
+Window.SetBackgroundTopColor(bg.red, bg.green, bg.blue);
+Window.SetBackgroundBottomColor(bg.red, bg.green, bg.blue);
 
-screen_width  = Window.GetWidth();
-screen_height = Window.GetHeight();
+screen_w = Window.GetWidth();
+screen_h = Window.GetHeight();
 
-// ── Text sprites ────────────────────────────────────────────
-status_sprite = Sprite();
-
-fun draw_text(text, x, y, r, g, b) {
-    img = Image.Text(text, r, g, b, "JetBrains Mono");
-    sprite = Sprite(img);
-    sprite.SetX(x);
-    sprite.SetY(y);
-    sprite.SetZ(10);
-    return sprite;
+// ── Helpers ─────────────────────────────────────────────────
+fun txt(text, x, y, r, g, b) {
+    img = Image.Text(text, r, g, b);
+    s = Sprite(img);
+    s.SetX(x);
+    s.SetY(y);
+    s.SetZ(10);
+    return s;
 }
 
-// ── Boot header ─────────────────────────────────────────────
-header_text = "╔══════════════════════════════════╗";
-header_mid  = "║       sumi :: booting         ║";
-header_end  = "╚══════════════════════════════════╝";
-
-cx = screen_width / 2 - 180;
-cy = screen_height / 2 - 80;
-
-draw_text(header_text, cx, cy,      dim_color.red, dim_color.green, dim_color.blue);
-draw_text(header_mid,  cx, cy + 20, acc_color.red, acc_color.green, acc_color.blue);
-draw_text(header_end,  cx, cy + 40, dim_color.red, dim_color.green, dim_color.blue);
-
-// ── Progress bar (boxy) ─────────────────────────────────────
-progress_x = cx;
-progress_y = cy + 70;
-progress_width = 260;
-progress_sprites = [];
-
-fun refresh_callback() {
-    // idle spinner dots
+fun center_txt(text, y, r, g, b) {
+    img = Image.Text(text, r, g, b);
+    s = Sprite(img);
+    s.SetX(screen_w / 2 - img.GetWidth() / 2);
+    s.SetY(y);
+    s.SetZ(10);
+    return s;
 }
 
-Plymouth.SetRefreshFunction(refresh_callback);
+// ── Boot title ──────────────────────────────────────────────
+title_y = screen_h / 2 - 60;
+center_txt("sumi", title_y, accent.red, accent.green, accent.blue);
 
 // ── Boot progress ───────────────────────────────────────────
-fun boot_progress_callback(duration, progress) {
-    // Draw boxy progress: [████████░░░░░░░░░░░░]
-    filled = Math.Int(progress * 20);
-    bar = "[";
-    for (i = 0; i < 20; i++) {
-        if (i < filled)
-            bar += "█";
-        else
-            bar += "░";
-    }
-    bar += "] " + Math.Int(progress * 100) + "%";
+bar_y = title_y + 40;
 
-    if (global.progress_sprite)
-        global.progress_sprite.SetImage(Image.Text(bar, acc_color.red, acc_color.green, acc_color.blue, "JetBrains Mono"));
-    else {
-        global.progress_sprite = draw_text(bar, progress_x, progress_y, acc_color.red, acc_color.green, acc_color.blue);
+fun boot_progress_callback(duration, progress) {
+    filled = Math.Int(progress * 30);
+    bar = "";
+    for (i = 0; i < 30; i++) {
+        if (i < filled)
+            bar += "=";
+        else
+            bar += "-";
+    }
+    bar = "[" + bar + "] " + Math.Int(progress * 100) + "%";
+
+    if (global.bar_sprite) {
+        img = Image.Text(bar, dim.red, dim.green, dim.blue);
+        global.bar_sprite.SetImage(img);
+        global.bar_sprite.SetX(screen_w / 2 - img.GetWidth() / 2);
+    } else {
+        global.bar_sprite = center_txt(bar, bar_y, dim.red, dim.green, dim.blue);
     }
 }
 
 Plymouth.SetBootProgressFunction(boot_progress_callback);
 
-// ── Password prompt (LUKS unlock) ───────────────────────────
-fun password_dialogue_setup(title, bullet_count) {
-    // Clear previous
-    if (global.pass_header)   global.pass_header.SetOpacity(0);
-    if (global.pass_box_top)  global.pass_box_top.SetOpacity(0);
-    if (global.pass_box_mid)  global.pass_box_mid.SetOpacity(0);
-    if (global.pass_box_bot)  global.pass_box_bot.SetOpacity(0);
-    if (global.pass_bullets)  global.pass_bullets.SetOpacity(0);
-    if (global.pass_label)    global.pass_label.SetOpacity(0);
-
-    px = screen_width / 2 - 200;
-    py = screen_height / 2 - 60;
-
-    box_top = "╔══════════════════════════════════════╗";
-    box_mid = "║  LUKS PASSPHRASE REQUIRED            ║";
-    box_sep = "╠══════════════════════════════════════╣";
-    box_inp = "║  > ";
-    box_bot = "╚══════════════════════════════════════╝";
-
-    // Build bullet string
-    bullets = "";
-    for (i = 0; i < bullet_count; i++)
-        bullets += "●";
-    for (i = bullet_count; i < 30; i++)
-        bullets += "·";
-
-    input_line = "║  > " + bullets + "  ║";
-
-    global.pass_box_top = draw_text(box_top, px, py,      dim_color.red, dim_color.green, dim_color.blue);
-    global.pass_header  = draw_text(box_mid, px, py + 20, acc_color.red, acc_color.green, acc_color.blue);
-    global.pass_box_sep = draw_text(box_sep, px, py + 40, dim_color.red, dim_color.green, dim_color.blue);
-    global.pass_bullets = draw_text(input_line, px, py + 60, fg_color.red, fg_color.green, fg_color.blue);
-    global.pass_box_bot = draw_text(box_bot, px, py + 80, dim_color.red, dim_color.green, dim_color.blue);
-
-    global.pass_label = draw_text("[ enter passphrase to unlock disk ]", px + 20, py + 110,
-                                   dim_color.red, dim_color.green, dim_color.blue);
-}
-
+// ── LUKS password prompt ────────────────────────────────────
 fun display_password_callback(prompt, bullet_count) {
-    password_dialogue_setup(prompt, bullet_count);
+    // Clear previous sprites
+    if (global.pw_title)   global.pw_title.SetOpacity(0);
+    if (global.pw_input)   global.pw_input.SetOpacity(0);
+    if (global.pw_hint)    global.pw_hint.SetOpacity(0);
+
+    // Hide boot title and progress during password entry
+    if (global.bar_sprite) global.bar_sprite.SetOpacity(0);
+
+    py = screen_h / 2 - 40;
+
+    // Title
+    global.pw_title = center_txt("unlock disk", py, accent.red, accent.green, accent.blue);
+
+    // Bullet field
+    dots = "";
+    for (i = 0; i < bullet_count; i++)
+        dots += "*";
+
+    if (bullet_count > 0)
+        prompt_text = "> " + dots;
+    else
+        prompt_text = "> ";
+
+    global.pw_input = center_txt(prompt_text, py + 30, fg.red, fg.green, fg.blue);
+
+    // Hint
+    global.pw_hint = center_txt("enter passphrase", py + 60, dim.red, dim.green, dim.blue);
 }
 
 Plymouth.SetDisplayPasswordFunction(display_password_callback);
 
 // ── Messages ────────────────────────────────────────────────
-msg_y = screen_height / 2 + 100;
+msg_y = screen_h / 2 + 80;
 
 fun message_callback(text) {
-    if (global.msg_sprite)
-        global.msg_sprite.SetImage(Image.Text(text, dim_color.red, dim_color.green, dim_color.blue, "JetBrains Mono"));
-    else
-        global.msg_sprite = draw_text(text, cx, msg_y, dim_color.red, dim_color.green, dim_color.blue);
+    if (global.msg_sprite) {
+        img = Image.Text(text, dim.red, dim.green, dim.blue);
+        global.msg_sprite.SetImage(img);
+        global.msg_sprite.SetX(screen_w / 2 - img.GetWidth() / 2);
+    } else {
+        global.msg_sprite = center_txt(text, msg_y, dim.red, dim.green, dim.blue);
+    }
 }
 
 Plymouth.SetMessageFunction(message_callback);
 
 // ── Wrong password ──────────────────────────────────────────
 fun display_normal_callback() {
-    // Reset after wrong password
+    // Clear error message on retry
+    if (global.err_sprite)
+        global.err_sprite.SetOpacity(0);
 }
 
 fun display_error_callback(text) {
-    if (global.err_sprite)
-        global.err_sprite.SetImage(Image.Text("[ ERROR: " + text + " ]", err_color.red, err_color.green, err_color.blue, "JetBrains Mono"));
-    else
-        global.err_sprite = draw_text("[ ERROR: " + text + " ]", cx, msg_y + 30, err_color.red, err_color.green, err_color.blue);
+    err_y = screen_h / 2 + 60;
+    if (global.err_sprite) {
+        img = Image.Text(text, err.red, err.green, err.blue);
+        global.err_sprite.SetImage(img);
+        global.err_sprite.SetX(screen_w / 2 - img.GetWidth() / 2);
+    } else {
+        global.err_sprite = center_txt(text, err_y, err.red, err.green, err.blue);
+    }
 }
 
 Plymouth.SetDisplayNormalFunction(display_normal_callback);
+
+// ── Refresh ─────────────────────────────────────────────────
+fun refresh_callback() {
+}
+
+Plymouth.SetRefreshFunction(refresh_callback);

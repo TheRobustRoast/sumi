@@ -102,8 +102,19 @@ func linkDotfiles(ctx model.InstallCtx) ([]string, error) {
 		}
 	}
 
+	os.MkdirAll(filepath.Join(h, ".local/bin"), 0o755) //nolint:errcheck
+
+	// Install the sumi binary (copy, not symlink — stays working if repo moves)
+	sumiBin := filepath.Join(sd, "sumi")
+	if fileExists(sumiBin) {
+		dst := filepath.Join(h, ".local/bin/sumi")
+		if data, err := os.ReadFile(sumiBin); err == nil {
+			os.WriteFile(dst, data, 0o755) //nolint:errcheck
+			lines = append(lines, "→ sumi binary installed")
+		}
+	}
+
 	if binDir := filepath.Join(sd, "bin"); fileExists(binDir) {
-		os.MkdirAll(filepath.Join(h, ".local/bin"), 0o755) //nolint:errcheck
 		if entries, err := os.ReadDir(binDir); err == nil {
 			for _, e := range entries {
 				src := filepath.Join(binDir, e.Name())

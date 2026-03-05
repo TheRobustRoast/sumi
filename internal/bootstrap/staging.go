@@ -77,13 +77,15 @@ if [[ -d "$HOME/sumi" ]]; then
     echo "sumi :: first boot setup"
     echo ""
     cd "$HOME/sumi"
-    ./sumi install
+
+    # Install binary to PATH first so greetd can find it after reboot
+    mkdir -p "$HOME/.local/bin"
+    install -m755 sumi "$HOME/.local/bin/sumi"
+
+    "$HOME/.local/bin/sumi" install
     if [[ $? -eq 0 ]]; then
-        # Install binary to PATH
-        install -Dm755 sumi "$HOME/.local/bin/sumi"
         touch "$MARKER"
         rm -f "$HOME/.sumi-first-boot.sh"
-        # Clean up the bash_profile hook
         sed -i '/sumi-first-boot/d' "$HOME/.bash_profile"
         echo ""
         echo "sumi installed! Reboot for the full experience."
