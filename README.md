@@ -51,8 +51,8 @@ Boot the Arch live ISO, connect to the internet, then:
 
 ```bash
 pacman -Sy git
-git clone https://github.com/TheRobustRoast/sumi /tmp/sumi
-cd /tmp/sumi && ./sumi bootstrap
+git clone https://github.com/TheRobustRoast/sumi
+cd sumi && ./sumi bootstrap
 ```
 
 A pre-built static binary is included in the repo — no Go needed on the ISO.
